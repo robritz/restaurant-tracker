@@ -4,6 +4,8 @@
 
 As a family full of neurodivergent folks, we often struggle to keep track of where everyone likes to eat, and what they like to eat. Each of us has different sensory needs when it comes to food. It can often be a challenge to remember where we all like to eat together. The goal of this app is to make this process easy and fun by centering the UX around simply taking a photo and uploading it later.
 
+This is V2 of my `food-sensitivity` app.
+
 ## Tech stack
 
 - **Next.js 15** (App Router) + **React 18**
