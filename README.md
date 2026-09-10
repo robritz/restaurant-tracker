@@ -28,14 +28,14 @@ This is V2 of my `food-sensitivity` app.
 # 1. Install dependencies
 npm install
 
-# 2. Configure your Mapbox token and Supabase local-dev keys
+# 2. Configure your Mapbox token
 cp .env.local.example .env.local
 # then edit .env.local and set MAPBOX_TOKEN=...
-# (the Supabase values are already filled in -- they're fixed local-dev
-# defaults, not secrets)
 
-# 3. Start local Supabase (Docker)
+# 3. Start local Supabase (Docker), then copy the printed URL/keys into
+# .env.local
 npm run supabase:start
+npm run supabase:status
 
 # 4. Run the dev server
 npm run dev
