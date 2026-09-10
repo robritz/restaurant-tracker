@@ -12,6 +12,7 @@ This is V2 of my `food-sensitivity` app.
 - **Material UI 6** with a dark theme
 - **exifr** for client-side EXIF parsing
 - **Mapbox Search Box API** for nearby-business lookup
+- **Supabase** for data storage (schema/data not wired up yet)
 
 ## Getting started
 
@@ -19,6 +20,7 @@ This is V2 of my `food-sensitivity` app.
 
 - Node.js 18+
 - A free [Mapbox access token](https://account.mapbox.com/access-tokens/)
+- [Docker](https://docs.docker.com/get-docker/), to run Supabase locally
 
 ### Setup
 
@@ -26,11 +28,16 @@ This is V2 of my `food-sensitivity` app.
 # 1. Install dependencies
 npm install
 
-# 2. Configure your Mapbox token
+# 2. Configure your Mapbox token and Supabase local-dev keys
 cp .env.local.example .env.local
 # then edit .env.local and set MAPBOX_TOKEN=...
+# (the Supabase values are already filled in -- they're fixed local-dev
+# defaults, not secrets)
 
-# 3. Run the dev server
+# 3. Start local Supabase (Docker)
+npm run supabase:start
+
+# 4. Run the dev server
 npm run dev
 ```
 
@@ -40,20 +47,57 @@ Open [http://localhost:3000](http://localhost:3000) and select a photo that has 
 
 ## Environment variables
 
-| Variable       | Description                                              |
-| -------------- | ------------------------------------------------------- |
-| `MAPBOX_TOKEN` | Mapbox access token, used **server-side** only.         |
+| Variable                        | Description                                                    |
+| -------------------------------- | --------------------------------------------------------------- |
+| `MAPBOX_TOKEN`                   | Mapbox access token, used **server-side** only.                 |
+| `NEXT_PUBLIC_SUPABASE_URL`       | Supabase project URL. Exposed to the browser.                   |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Supabase anon/publishable key (RLS-enforced). Exposed to the browser. |
+| `SUPABASE_SERVICE_ROLE_KEY`      | Bypasses RLS. **Server-side only** -- never exposed to the browser. |
 
 `MAPBOX_TOKEN` is read only inside the `/api/nearby` route, so it is never exposed to the browser.
 
+## Supabase
+
+`supabase/` is a Supabase CLI project (`supabase init`'d at the repo root; see
+`supabase/config.toml`). Schema will live in `supabase/migrations/*.sql` once
+there's a schema to add -- none exists yet.
+
+- `src/lib/supabase/client.ts` -- `createSupabaseClient()` (RLS-enforced,
+  what the app should use) and `createSupabaseServiceRoleClient()` (bypasses
+  RLS; server-side only, e.g. inside a route handler).
+- `src/lib/supabase/env.ts` -- reads the env vars above.
+
+```bash
+npm run supabase:start   # starts local Supabase in Docker
+npm run supabase:status  # reprint the local URL/keys
+npm run supabase:stop
+```
+
+After adding a migration under `supabase/migrations/`:
+
+```bash
+npm run supabase:reset   # reapply all migrations against the local database
+npm run gen:types        # regenerate src/lib/supabase/database.types.ts
+```
+
+There's no hosted Supabase project linked yet -- `supabase link` and `supabase
+db push` (see the `food-tracker` repo's `data-access/scripts/provision-supabase.sh`
+for a walkthrough) are what would provision one when this app is ready for
+real data.
+
 ## Scripts
 
-| Command         | Description                       |
-| --------------- | --------------------------------- |
-| `npm run dev`   | Start the development server      |
-| `npm run build` | Production build                  |
-| `npm run start` | Serve the production build        |
-| `npm run lint`  | Run ESLint                        |
+| Command                  | Description                            |
+| ------------------------- | --------------------------------------- |
+| `npm run dev`             | Start the development server            |
+| `npm run build`           | Production build                        |
+| `npm run start`           | Serve the production build              |
+| `npm run lint`             | Run ESLint                              |
+| `npm run supabase:start`  | Start local Supabase (Docker)           |
+| `npm run supabase:stop`   | Stop local Supabase                     |
+| `npm run supabase:status` | Print local Supabase URL/keys           |
+| `npm run supabase:reset`  | Reapply migrations to the local database |
+| `npm run gen:types`       | Regenerate Supabase TypeScript types    |
 
 ## Project structure
 
@@ -63,7 +107,15 @@ src/
 │   ├── api/nearby/route.ts   # Server route: coords -> nearby businesses (Mapbox)
 │   ├── layout.tsx            # Root layout, MUI theme provider
 │   └── page.tsx              # Home: image select + EXIF read + results
+├── lib/
+│   └── supabase/
+│       ├── client.ts         # createSupabaseClient() / createSupabaseServiceRoleClient()
+│       └── env.ts            # Reads Supabase env vars
 └── theme.ts                  # MUI dark theme
+
+supabase/
+├── config.toml                # Supabase CLI project config
+└── migrations/                # Schema migrations (none yet)
 ```
 
 ## Known limitations (it's a POC)
