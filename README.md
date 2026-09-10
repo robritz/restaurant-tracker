@@ -1,17 +1,8 @@
-# Location from Image
+# Restaurant Tracker
 
 > ⚠️ **Proof of Concept.** 
 
-A small web app that guesses **where a photo was taken** by reading the image's embedded GPS coordinates (EXIF), then lists nearby food-and-drink businesses using the Mapbox Search API.
-
-## How it works
-
-1. You select an image in the browser.
-2. The app reads the photo's EXIF GPS data **client-side** (via [`exifr`](https://github.com/MikeKovarik/exifr)) — no upload of the raw image to a server.
-3. The coordinates are sent to an internal API route (`/api/nearby`), which queries the [Mapbox Search Box API](https://docs.mapbox.com/api/search/search-box/) for `food_and_drink` businesses near that point.
-4. The five closest businesses within ~100 feet are shown.
-
-If the image has no GPS data (common for screenshots, downloaded images, or photos with location tagging disabled), the app tells you so.
+As a family full of neurodivergent folks, we often struggle to keep track of where everyone likes to eat, and what they like to eat. Each of us has different sensory needs when it comes to food. It can often be a challenge to remember where we all like to eat together. The goal of this app is to make this process easy and fun by centering the UX around simply taking a photo and uploading it later.
 
 ## Tech stack
 
