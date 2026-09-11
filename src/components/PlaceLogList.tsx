@@ -2,7 +2,7 @@
 
 import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
+import ListItem from "@mui/material/ListItem";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import { Fragment } from "react";
@@ -12,7 +12,7 @@ function dishes(count: number): string {
   return count === 1 ? "1 dish" : `${count} dishes`;
 }
 
-function lastVisited(capturedAt: string): string {
+function capturedOn(capturedAt: string): string {
   return new Date(capturedAt).toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
@@ -21,28 +21,21 @@ function lastVisited(capturedAt: string): string {
 }
 
 /**
- * Every Place you've eaten at, most recent visit first. This is what the
- * panel shows when no pin is selected -- and the reliable way to reach a
- * Place that's hard to hit as a small pin on a phone.
+ * Every Place you've eaten at, most recently captured first. This is what
+ * the panel shows when no pin is selected -- and the reliable way to reach
+ * a Place that's hard to hit as a small pin on a phone.
  */
 export default function PlaceLogList({
   placeLogs,
-  selectedId,
-  onSelect,
 }: {
   placeLogs: PlaceLogSummary[];
-  selectedId?: string | null;
-  onSelect?: (id: string) => void;
 }) {
   return (
     <List disablePadding>
       {placeLogs.map((placeLog, index) => (
         <Fragment key={placeLog.id}>
           {index > 0 && <Divider component="li" />}
-          <ListItemButton
-            selected={selectedId === placeLog.id}
-            onClick={() => onSelect?.(placeLog.id)}
-          >
+          <ListItem>
             <ListItemText
               primary={placeLog.name}
               secondary={
@@ -52,12 +45,12 @@ export default function PlaceLogList({
                   </Typography>
                   <Typography variant="caption" component="span">
                     {dishes(placeLog.entry_count)} ·{" "}
-                    {lastVisited(placeLog.last_captured_at)}
+                    {capturedOn(placeLog.last_captured_at)}
                   </Typography>
                 </>
               }
             />
-          </ListItemButton>
+          </ListItem>
         </Fragment>
       ))}
     </List>

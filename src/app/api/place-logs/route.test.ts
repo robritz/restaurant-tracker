@@ -28,14 +28,13 @@ type PlaceRow = typeof DINER & { entries: { captured_at: string }[] };
 /**
  * Shapes the nested select the route uses: each Place carries the
  * captured-at of its Entries, which is where the dish count and
- * last-visited date come from.
+ * most recent captured-at come from.
  */
 function stubSupabase(rows: PlaceRow[] | null, error: unknown = null) {
-  const order = vi.fn().mockResolvedValue({ data: rows, error });
-  const select = vi.fn().mockReturnValue({ order });
+  const select = vi.fn().mockResolvedValue({ data: rows, error });
   const from = vi.fn().mockReturnValue({ select });
   createSupabaseServiceRoleClient.mockReturnValue({ from });
-  return { from, select, order };
+  return { from, select };
 }
 
 async function get() {
@@ -89,22 +88,21 @@ describe("GET /api/place-logs", () => {
     });
   });
 
-  it("excludes a Place that has no Entries", async () => {
+  it("excludes a Place that has no Entries in the query itself", async () => {
     // A failed Entry save leaves its Place behind deliberately, since Places
     // are shared -- so a Place with no Entries can exist and must not pin.
-    stubSupabase([
+    // An inner join keeps it out of the result set entirely, rather than
+    // relying on a filter here that a later refactor could drop.
+    const supabase = stubSupabase([
       { ...DINER, entries: [{ captured_at: "2026-01-01T12:00:00.000Z" }] },
-      { ...CAFE, entries: [] },
     ]);
 
-    const { body } = await get();
+    await get();
 
-    expect(body.placeLogs.map((log: { name: string }) => log.name)).toEqual([
-      "Test Diner",
-    ]);
+    expect(supabase.select.mock.calls[0][0]).toContain("entries!inner");
   });
 
-  it("orders Places by most recent visit first", async () => {
+  it("orders Places by most recently captured first", async () => {
     stubSupabase([
       { ...DINER, entries: [{ captured_at: "2026-01-01T12:00:00.000Z" }] },
       { ...CAFE, entries: [{ captured_at: "2026-05-05T12:00:00.000Z" }] },

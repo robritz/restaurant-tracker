@@ -46,10 +46,15 @@ export async function GET() {
   // nothing. Scoping to a user arrives with auth.
   const supabase = createSupabaseServiceRoleClient();
 
+  // !inner makes the join an inner one, so a Place with no Entries never
+  // comes back at all. A Place like that is the residue of a failed save --
+  // a failed Entry leaves its shared Place behind -- and is not somewhere
+  // anyone has eaten, so it must never reach the map.
   const { data, error } = await supabase
     .from("places")
-    .select("id, name, address, latitude, longitude, entries (captured_at)")
-    .order("name");
+    .select(
+      "id, name, address, latitude, longitude, entries!inner (captured_at)",
+    );
 
   if (error || !data) {
     return NextResponse.json(
@@ -59,10 +64,6 @@ export async function GET() {
   }
 
   const placeLogs = (data as PlaceRow[])
-    // A Place with no Entries is not somewhere you've eaten -- it's the
-    // residue of a failed save, since a failed Entry leaves its shared Place
-    // behind. Never pin one.
-    .filter((place) => place.entries.length > 0)
     .map(toSummary)
     .sort((a, b) => b.last_captured_at.localeCompare(a.last_captured_at));
 
