@@ -38,26 +38,35 @@ export type Database = {
         Row: {
           captured_at: string
           created_at: string
+          height: number
           id: string
           photo_path: string
           place_id: string
+          thumbnail_path: string
           title: string
+          width: number
         }
         Insert: {
           captured_at: string
           created_at?: string
+          height: number
           id?: string
           photo_path: string
           place_id: string
+          thumbnail_path: string
           title: string
+          width: number
         }
         Update: {
           captured_at?: string
           created_at?: string
+          height?: number
           id?: string
           photo_path?: string
           place_id?: string
+          thumbnail_path?: string
           title?: string
+          width?: number
         }
         Relationships: [
           {
