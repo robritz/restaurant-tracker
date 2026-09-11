@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import sharp from "sharp";
 
 const createSupabaseServiceRoleClient = vi.fn();
 vi.mock("@/lib/supabase/client", () => ({
@@ -74,7 +75,37 @@ function stubSupabase(
   return { upsert, insert, upload, remove, storageFrom, from };
 }
 
-function entryFormData(overrides: Record<string, string> = {}) {
+/**
+ * Real JPEGs, because the route runs sharp for real rather than mocking it
+ * -- a fake byte string would fail to decode. Generating them with sharp
+ * keeps binary fixtures out of the repo.
+ */
+async function jpeg(
+  width: number,
+  height: number,
+  orientation?: number,
+): Promise<File> {
+  let image = sharp({
+    create: {
+      width,
+      height,
+      channels: 3,
+      background: { r: 200, g: 120, b: 60 },
+    },
+  });
+  if (orientation !== undefined) image = image.withMetadata({ orientation });
+  const buffer = await image.jpeg().toBuffer();
+  return new File([new Uint8Array(buffer)], "dish.jpg", { type: "image/jpeg" });
+}
+
+// One landscape photo reused by every test that doesn't care about the
+// image itself. Encoding is slow enough to be worth doing once.
+const LANDSCAPE = await jpeg(1600, 900);
+
+function entryFormData(
+  overrides: Record<string, string> = {},
+  photo: File = LANDSCAPE,
+) {
   const form = new FormData();
   form.set("title", "Margherita Pizza");
   form.set("captured_at", "2026-01-01T12:00:00.000Z");
@@ -87,10 +118,7 @@ function entryFormData(overrides: Record<string, string> = {}) {
     if (value === "") form.delete(key);
     else form.set(key, value);
   }
-  form.set(
-    "photo",
-    new File([new Uint8Array([1, 2, 3])], "dish.jpg", { type: "image/jpeg" }),
-  );
+  form.set("photo", photo);
   return form;
 }
 
@@ -142,16 +170,49 @@ describe("POST /api/entries", () => {
     expect(options).toMatchObject({ contentType: "image/jpeg" });
   });
 
+  it("stores a thumbnail alongside the original photo", async () => {
+    const supabase = stubSupabase();
+
+    await post(entryFormData());
+
+    const paths = supabase.upload.mock.calls.map((call: unknown[]) => call[0]);
+    expect(paths).toHaveLength(2);
+    expect(paths[1]).toMatch(/\.webp$/);
+    const [, , options] = supabase.upload.mock.calls[1];
+    expect(options).toMatchObject({ contentType: "image/webp" });
+  });
+
+  it("records the thumbnail's dimensions upright, honouring EXIF orientation", async () => {
+    const supabase = stubSupabase();
+
+    // Stored 1600x900 but tagged orientation 6 ("rotate 90° to display"), so
+    // upright it is 900x1600 -- which at 800px on the long edge is 450x800.
+    // Without the rotate it would come out 800x450 and every portrait photo
+    // in the gallery would be sideways.
+    await post(entryFormData({}, await jpeg(1600, 900, 6)));
+
+    expect(supabase.insert.mock.calls[0][0]).toMatchObject({
+      width: 450,
+      height: 800,
+    });
+  });
+
   it("inserts the entry referencing the upserted place and the stored photo", async () => {
     const supabase = stubSupabase();
 
     await post(entryFormData());
 
-    const uploadedPath = supabase.upload.mock.calls[0][0];
+    const [uploadedPath, thumbnailPath] = supabase.upload.mock.calls.map(
+      (call: unknown[]) => call[0],
+    );
+    // The landscape fixture is 1600x900, so 800px on the long edge is 800x450.
     expect(supabase.insert).toHaveBeenCalledWith({
       place_id: EXISTING_PLACE.id,
       title: "Margherita Pizza",
       photo_path: uploadedPath,
+      thumbnail_path: thumbnailPath,
+      width: 800,
+      height: 450,
       captured_at: "2026-01-01T12:00:00.000Z",
     });
   });
@@ -232,14 +293,42 @@ describe("POST /api/entries", () => {
     expect(response.status).toBe(500);
   });
 
-  it("removes the uploaded photo when the entry insert fails", async () => {
+  it("removes both uploaded photos when the entry insert fails", async () => {
     const supabase = stubSupabase({
       entry: { data: null, error: { message: "insert failed" } },
     });
 
     await post(entryFormData());
 
-    const uploadedPath = supabase.upload.mock.calls[0][0];
-    expect(supabase.remove).toHaveBeenCalledWith([uploadedPath]);
+    const paths = supabase.upload.mock.calls.map((call: unknown[]) => call[0]);
+    expect(supabase.remove).toHaveBeenCalledWith(paths);
+  });
+
+  it("rejects a photo that is not a readable image", async () => {
+    stubSupabase();
+    const form = entryFormData(
+      {},
+      new File([new Uint8Array([1, 2, 3])], "dish.jpg", { type: "image/jpeg" }),
+    );
+
+    const { response } = await post(form);
+
+    expect(response.status).toBe(400);
+  });
+
+  it("writes nothing when the photo is not a readable image", async () => {
+    const supabase = stubSupabase();
+
+    await post(
+      entryFormData(
+        {},
+        new File([new Uint8Array([1, 2, 3])], "dish.jpg", {
+          type: "image/jpeg",
+        }),
+      ),
+    );
+
+    expect(supabase.upsert).not.toHaveBeenCalled();
+    expect(supabase.upload).not.toHaveBeenCalled();
   });
 });
