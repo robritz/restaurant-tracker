@@ -5,14 +5,13 @@ import type { Database } from "./database.types";
 export type SupabaseDataClient = SupabaseClient<Database>;
 
 /**
- * The client for use in client components and browser code. Requests are
- * made as the signed-in caller (or anonymous, until auth exists), so once
- * RLS policies are added they'll scope reads/writes automatically.
+ * The RLS-enforced client. Requests are made as the signed-in caller (or
+ * anonymous, until auth exists), so once RLS policies are added they'll
+ * scope reads/writes automatically.
  *
- * `env` is optional -- callers that already have `NEXT_PUBLIC_SUPABASE_URL`/
- * `NEXT_PUBLIC_SUPABASE_ANON_KEY` in `process.env` (true in both the browser
- * and server, since Next.js inlines `NEXT_PUBLIC_*` vars at build time) can
- * omit it.
+ * Omitting `env` reads `SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` from
+ * `process.env`, which works server-side only -- `SUPABASE_URL` is not
+ * inlined into client bundles. Browser callers must pass `env` explicitly.
  */
 export function createSupabaseClient(env?: SupabaseEnv): SupabaseDataClient {
   const { url, anonKey } = env

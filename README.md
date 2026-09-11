@@ -50,7 +50,7 @@ Open [http://localhost:3000](http://localhost:3000) and select a photo that has 
 | Variable                        | Description                                                    |
 | -------------------------------- | --------------------------------------------------------------- |
 | `MAPBOX_TOKEN`                   | Mapbox access token, used **server-side** only.                 |
-| `NEXT_PUBLIC_SUPABASE_URL`       | Supabase project URL. Exposed to the browser.                   |
+| `SUPABASE_URL`                   | Supabase project URL. **Server-side only.**                     |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Supabase anon/publishable key (RLS-enforced). Exposed to the browser. |
 | `SUPABASE_SERVICE_ROLE_KEY`      | Bypasses RLS. **Server-side only** -- never exposed to the browser. |
 
