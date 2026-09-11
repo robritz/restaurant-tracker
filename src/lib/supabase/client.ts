@@ -1,10 +1,8 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { loadServiceRoleEnv, loadSupabaseEnv, normalizeSupabaseUrl, type SupabaseEnv } from "./env";
+import type { Database } from "./database.types";
 
-// No tables exist yet -- once a migration adds some, run `npm run gen:types`
-// and swap this for `SupabaseClient<Database>` (see the food-tracker repo's
-// data-access/src/client.ts for the pattern).
-export type SupabaseDataClient = SupabaseClient;
+export type SupabaseDataClient = SupabaseClient<Database>;
 
 /**
  * The client for use in client components and browser code. Requests are
@@ -20,7 +18,7 @@ export function createSupabaseClient(env?: SupabaseEnv): SupabaseDataClient {
   const { url, anonKey } = env
     ? { url: normalizeSupabaseUrl(env.url), anonKey: env.anonKey }
     : loadSupabaseEnv();
-  return createClient(url, anonKey);
+  return createClient<Database>(url, anonKey);
 }
 
 /**
@@ -29,7 +27,7 @@ export function createSupabaseClient(env?: SupabaseEnv): SupabaseDataClient {
  */
 export function createSupabaseServiceRoleClient(): SupabaseDataClient {
   const { url, serviceRoleKey } = loadServiceRoleEnv();
-  return createClient(url, serviceRoleKey, {
+  return createClient<Database>(url, serviceRoleKey, {
     auth: { autoRefreshToken: false, persistSession: false },
   });
 }
