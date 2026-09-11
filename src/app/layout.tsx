@@ -5,8 +5,8 @@ import CssBaseline from "@mui/material/CssBaseline";
 import theme from "@/theme";
 
 export const metadata: Metadata = {
-  title: "Location from Image",
-  description: "Upload an image to find its location",
+  title: "Restaurant Tracker",
+  description: "Keep track of places your family likes to eat",
 };
 
 export const viewport: Viewport = {
