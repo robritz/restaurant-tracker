@@ -9,7 +9,7 @@ export type SupabaseDataClient = SupabaseClient<Database>;
  * anonymous, until auth exists), so once RLS policies are added they'll
  * scope reads/writes automatically.
  *
- * Omitting `env` reads `SUPABASE_URL`/`NEXT_PUBLIC_SUPABASE_ANON_KEY` from
+ * Omitting `env` reads `SUPABASE_URL`/`SUPABASE_ANON_KEY` from
  * `process.env`, which works server-side only -- `SUPABASE_URL` is not
  * inlined into client bundles. Browser callers must pass `env` explicitly.
  */

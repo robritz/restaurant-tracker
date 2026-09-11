@@ -35,7 +35,7 @@ export function normalizeSupabaseUrl(url: string): string {
 export function loadSupabaseEnv(): SupabaseEnv {
   return {
     url: normalizeSupabaseUrl(readEnv("SUPABASE_URL")),
-    anonKey: readEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    anonKey: readEnv("SUPABASE_ANON_KEY"),
   };
 }
 

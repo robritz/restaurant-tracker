@@ -51,7 +51,7 @@ Open [http://localhost:3000](http://localhost:3000) and select a photo that has 
 | -------------------------------- | --------------------------------------------------------------- |
 | `MAPBOX_TOKEN`                   | Mapbox access token, used **server-side** only.                 |
 | `SUPABASE_URL`                   | Supabase project URL. **Server-side only.**                     |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY`  | Supabase anon/publishable key (RLS-enforced). Exposed to the browser. |
+| `SUPABASE_ANON_KEY`  | Supabase anon/publishable key (RLS-enforced). Exposed to the browser. |
 | `SUPABASE_SERVICE_ROLE_KEY`      | Bypasses RLS. **Server-side only** -- never exposed to the browser. |
 
 `MAPBOX_TOKEN` is read only inside the `/api/places` route, so it is never exposed to the browser.
