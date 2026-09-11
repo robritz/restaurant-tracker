@@ -27,14 +27,15 @@ export function normalizeSupabaseUrl(url: string): string {
 }
 
 /**
- * Connection config for the anon (RLS-enforced) client. Uses the
- * `NEXT_PUBLIC_` prefix because this client also runs in the browser --
- * Next.js only inlines env vars with that prefix into client bundles.
+ * Connection config for the anon (RLS-enforced) client. `SUPABASE_URL` has
+ * no `NEXT_PUBLIC_` prefix, so it is server-only -- Next.js inlines just the
+ * prefixed vars into client bundles. Pass an explicit `SupabaseEnv` to
+ * `createSupabaseClient()` if this client is ever needed in the browser.
  */
 export function loadSupabaseEnv(): SupabaseEnv {
   return {
-    url: normalizeSupabaseUrl(readEnv("NEXT_PUBLIC_SUPABASE_URL")),
-    anonKey: readEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY"),
+    url: normalizeSupabaseUrl(readEnv("SUPABASE_URL")),
+    anonKey: readEnv("SUPABASE_ANON_KEY"),
   };
 }
 
