@@ -10,8 +10,8 @@ export type SupabaseDataClient = SupabaseClient<Database>;
  * scope reads/writes automatically.
  *
  * Omitting `env` reads `SUPABASE_URL`/`SUPABASE_ANON_KEY` from
- * `process.env`, which works server-side only -- `SUPABASE_URL` is not
- * inlined into client bundles. Browser callers must pass `env` explicitly.
+ * `process.env`, which works server-side only -- neither is inlined into
+ * client bundles. Browser callers must pass `env` explicitly.
  */
 export function createSupabaseClient(env?: SupabaseEnv): SupabaseDataClient {
   const { url, anonKey } = env

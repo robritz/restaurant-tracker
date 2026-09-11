@@ -27,9 +27,9 @@ export function normalizeSupabaseUrl(url: string): string {
 }
 
 /**
- * Connection config for the anon (RLS-enforced) client. `SUPABASE_URL` has
- * no `NEXT_PUBLIC_` prefix, so it is server-only -- Next.js inlines just the
- * prefixed vars into client bundles. Pass an explicit `SupabaseEnv` to
+ * Connection config for the anon (RLS-enforced) client. Neither variable is
+ * prefixed `NEXT_PUBLIC_`, so neither is inlined into client bundles and
+ * this reads as server-only. Pass an explicit `SupabaseEnv` to
  * `createSupabaseClient()` if this client is ever needed in the browser.
  */
 export function loadSupabaseEnv(): SupabaseEnv {
