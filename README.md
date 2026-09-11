@@ -51,7 +51,7 @@ Open [http://localhost:3000](http://localhost:3000) and select a photo that has 
 | -------------------------------- | --------------------------------------------------------------- |
 | `MAPBOX_TOKEN`                   | Mapbox access token, used **server-side** only.                 |
 | `SUPABASE_URL`                   | Supabase project URL. **Server-side only.**                     |
-| `SUPABASE_ANON_KEY`  | Supabase anon/publishable key (RLS-enforced). Exposed to the browser. |
+| `SUPABASE_ANON_KEY`              | Supabase anon/publishable key (RLS-enforced). **Server-side only.** |
 | `SUPABASE_SERVICE_ROLE_KEY`      | Bypasses RLS. **Server-side only** -- never exposed to the browser. |
 
 `MAPBOX_TOKEN` is read only inside the `/api/places` route, so it is never exposed to the browser.
@@ -62,9 +62,11 @@ Open [http://localhost:3000](http://localhost:3000) and select a photo that has 
 `supabase/config.toml`). Schema lives in `supabase/migrations/*.sql` --
 `places` and `entries` plus the `entry-photos` storage bucket.
 
-- `src/lib/supabase/client.ts` -- `createSupabaseClient()` (RLS-enforced,
-  what the app should use) and `createSupabaseServiceRoleClient()` (bypasses
-  RLS; server-side only, e.g. inside a route handler).
+- `src/lib/supabase/client.ts` -- `createSupabaseClient()` (RLS-enforced) and
+  `createSupabaseServiceRoleClient()` (bypasses RLS; server-side only). Both
+  tables have RLS on with no policies, so the anon client can't read or write
+  them yet -- every write goes through `createSupabaseServiceRoleClient()`
+  inside `POST /api/entries`. Policies get added alongside auth.
 - `src/lib/supabase/env.ts` -- reads the env vars above.
 
 ```bash
@@ -80,10 +82,18 @@ npm run supabase:reset   # reapply all migrations against the local database
 npm run gen:types        # regenerate src/lib/supabase/database.types.ts
 ```
 
-There's no hosted Supabase project linked yet -- `supabase link` and `supabase
-db push` (see the `food-tracker` repo's `data-access/scripts/provision-supabase.sh`
-for a walkthrough) are what would provision one when this app is ready for
-real data.
+The repo is linked to a hosted Supabase project, and the schema above has
+been pushed to it:
+
+```bash
+supabase db push --dry-run   # preview what would be applied remotely
+supabase db push             # apply pending migrations to the hosted project
+supabase migration list      # compare local and remote migration state
+```
+
+Deploying the app needs `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
+`SUPABASE_SERVICE_ROLE_KEY` set to the hosted project's values -- the
+`.env.local` written during setup points at local Supabase.
 
 ## Scripts
 
