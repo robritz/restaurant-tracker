@@ -379,7 +379,7 @@ export default function CaptureForm() {
                     fullWidth
                     size="small"
                     label="Dish"
-                    placeholder="e.g. Margherita Pizza"
+                    placeholder="e.g. Cheeseburger"
                     value={title}
                     onChange={(event) => setTitle(event.target.value)}
                   />
