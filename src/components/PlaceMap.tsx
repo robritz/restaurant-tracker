@@ -45,9 +45,13 @@ export default function PlaceMap({
 }) {
   const mapRef = useRef<MapRef>(null);
   const [tilesFailed, setTilesFailed] = useState(false);
+  // Two pieces of state for one message, because the Snackbar fades out:
+  // clearing the failure on dismiss would blank the text mid-transition, so
+  // the message outlives the open flag and is dropped once it has gone.
   const [locateFailure, setLocateFailure] = useState<GeolocateFailure | null>(
     null,
   );
+  const [locateOpen, setLocateOpen] = useState(false);
   // Framed from whatever was known at mount; the map keeps its own camera
   // from then on.
   const [initialBounds] = useState(() => fitBounds(placeLogs));
@@ -131,8 +135,11 @@ export default function PlaceMap({
           position="top-right"
           positionOptions={{ enableHighAccuracy: true }}
           trackUserLocation={false}
-          onGeolocate={() => setLocateFailure(null)}
-          onError={(event) => setLocateFailure(geolocateFailure(event.code))}
+          onGeolocate={() => setLocateOpen(false)}
+          onError={(event) => {
+            setLocateFailure(geolocateFailure(event.code));
+            setLocateOpen(true);
+          }}
         />
         {placeLogs.map((placeLog) => {
           const { fontSize, color, zIndex } = pinStyle(
@@ -183,7 +190,7 @@ export default function PlaceMap({
       )}
 
       <Snackbar
-        open={locateFailure !== null}
+        open={locateOpen}
         // A refused permission disables the control for the rest of the
         // session, so its message stays until dismissed; the failures a
         // second tap could fix fade on their own.
@@ -191,11 +198,12 @@ export default function PlaceMap({
         // A tap on the map is not an acknowledgement: dismissing is the
         // close button, so the message survives the next thing the user does.
         onClose={(_event, reason) => {
-          if (reason !== "clickaway") setLocateFailure(null);
+          if (reason !== "clickaway") setLocateOpen(false);
         }}
+        TransitionProps={{ onExited: () => setLocateFailure(null) }}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
-        <Alert severity="warning" onClose={() => setLocateFailure(null)}>
+        <Alert severity="warning" onClose={() => setLocateOpen(false)}>
           {locateFailure?.message}
         </Alert>
       </Snackbar>

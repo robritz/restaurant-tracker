@@ -86,7 +86,16 @@ function FullScreenDish({
   return (
     // Dialog brings Escape and click-outside-to-close with it, plus focus
     // trapping, so none of that is hand-rolled here.
-    <Dialog open onClose={onClose} maxWidth="lg" fullWidth>
+    <Dialog
+      open
+      onClose={onClose}
+      maxWidth="lg"
+      fullWidth
+      // Near edge-to-edge, because escaping the 800px thumbnail is the whole
+      // point of opening a dish. The rim that's left is not slack: it is the
+      // backdrop, and tapping it is one of the two ways back out.
+      slotProps={{ paper: { sx: { m: 2, maxHeight: "calc(100% - 32px)" } } }}
+    >
       <Box sx={{ bgcolor: "common.black", textAlign: "center" }}>
         {failed ? (
           <Alert severity="error" sx={{ m: 2 }}>
@@ -100,7 +109,8 @@ function FullScreenDish({
             sx={{
               display: "block",
               maxWidth: "100%",
-              maxHeight: "80dvh",
+              // The dialog's own margins, plus room for the Title beneath.
+              maxHeight: "calc(100dvh - 128px)",
               m: "0 auto",
             }}
           />
