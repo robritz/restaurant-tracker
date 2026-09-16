@@ -157,7 +157,7 @@ export default function DishGallery({ entries }: { entries: PlaceLogEntry[] }) {
                   aspectRatio: `${entry.width} / ${entry.height}`,
                 }}
               />
-              <Typography variant="caption" component="p" sx={{ mt: 0.5 }}>
+              <Typography variant="caption" component="p" sx={{ mt: 0.5, color:"white" }}>
                 {entry.title}
               </Typography>
             </Box>
