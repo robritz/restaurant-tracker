@@ -12,6 +12,7 @@ import Snackbar from "@mui/material/Snackbar";
 import PlaceIcon from "@mui/icons-material/Place";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
+import { INITIAL_FIT, drawOrder, fitBounds } from "@/lib/map/pins";
 
 // Scoped to styles and fonts and URL-restricted at Mapbox -- the secret
 // MAPBOX_TOKEN keeps its search scopes and never reaches the browser. See
@@ -19,25 +20,6 @@ import type { PlaceLogSummary } from "@/app/api/place-logs/route";
 const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN;
 
 const MAP_STYLE = "mapbox://styles/mapbox/streets-v12";
-
-// A single pin's bounds have zero area, so fitting them would zoom to a
-// meaningless level. Clamping gives it a neighbourhood instead.
-const MAX_INITIAL_ZOOM = 14;
-
-const FIT_PADDING = 56;
-
-function bounds(
-  placeLogs: PlaceLogSummary[],
-): [number, number, number, number] {
-  const longitudes = placeLogs.map((placeLog) => placeLog.longitude);
-  const latitudes = placeLogs.map((placeLog) => placeLog.latitude);
-  return [
-    Math.min(...longitudes),
-    Math.min(...latitudes),
-    Math.max(...longitudes),
-    Math.max(...latitudes),
-  ];
-}
 
 /**
  * One pin per Place, framed on open to everywhere the family has eaten.
@@ -65,7 +47,7 @@ export default function PlaceMap({
   const [locateFailed, setLocateFailed] = useState(false);
   // Framed from whatever was known at mount; the map keeps its own camera
   // from then on.
-  const [initialBounds] = useState(() => bounds(placeLogs));
+  const [initialBounds] = useState(() => fitBounds(placeLogs));
 
   // The map is laid out at zero size while its tab is hidden, so it has to
   // be told the viewport changed on the way back in.
@@ -112,12 +94,6 @@ export default function PlaceMap({
     );
   }
 
-  // Selected last, so it draws above its neighbours instead of behind one.
-  const selectedLast = [
-    ...placeLogs.filter((placeLog) => placeLog.id !== selectedId),
-    ...placeLogs.filter((placeLog) => placeLog.id === selectedId),
-  ];
-
   return (
     <Box sx={{ height: "100%", width: "100%", position: "relative" }}>
       <Map
@@ -126,10 +102,7 @@ export default function PlaceMap({
         mapStyle={MAP_STYLE}
         initialViewState={{
           bounds: initialBounds,
-          fitBoundsOptions: {
-            padding: FIT_PADDING,
-            maxZoom: MAX_INITIAL_ZOOM,
-          },
+          fitBoundsOptions: INITIAL_FIT,
         }}
         onError={() => setTilesFailed(true)}
         // Mapbox reports recoverable failures through the same channel as
@@ -146,7 +119,7 @@ export default function PlaceMap({
           trackUserLocation={false}
           onError={() => setLocateFailed(true)}
         />
-        {selectedLast.map((placeLog) => {
+        {drawOrder(placeLogs, selectedId).map((placeLog) => {
           const selected = placeLog.id === selectedId;
           return (
             <Marker
