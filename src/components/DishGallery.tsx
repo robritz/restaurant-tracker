@@ -157,7 +157,20 @@ export default function DishGallery({ entries }: { entries: PlaceLogEntry[] }) {
                   aspectRatio: `${entry.width} / ${entry.height}`,
                 }}
               />
-              <Typography variant="caption" component="p" sx={{ mt: 0.5, color:"white" }}>
+              <Typography
+                variant="caption"
+                // A <p> inside the tile's <button> is invalid HTML, so
+                // this is a span made to behave like one.
+                component="span"
+                sx={{
+                  display: "block",
+                  mt: 0.5,
+                  color: "text.primary",
+                  // A dish name is free text: it has to wrap rather than
+                  // push its tile wider, even unbroken.
+                  overflowWrap: "anywhere",
+                }}
+              >
                 {entry.title}
               </Typography>
             </Box>

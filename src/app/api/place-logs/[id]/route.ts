@@ -1,10 +1,7 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
 import { PHOTO_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/photos";
-
-// Not expected to be reached -- it exists so one request can never sign an
-// unbounded number of URLs.
-const MAX_ENTRIES = 50;
+import { MAX_PLACE_LOG_ENTRIES } from "@/lib/place-logs";
 
 /** One dish photographed at a Place, ready to draw in the gallery. */
 export type PlaceLogEntry = {
@@ -47,13 +44,13 @@ type PlaceRow = {
 
 /**
  * The query already orders and caps these. Re-asserting it here is what
- * makes "newest first, at most MAX_ENTRIES" a property of the response
+ * makes "newest first, at most MAX_PLACE_LOG_ENTRIES" a property of the response
  * rather than of how the query happens to be written today.
  */
 function newestFirst(entries: EntryRow[]): EntryRow[] {
   return [...entries]
     .sort((a, b) => b.captured_at.localeCompare(a.captured_at))
-    .slice(0, MAX_ENTRIES);
+    .slice(0, MAX_PLACE_LOG_ENTRIES);
 }
 
 export async function GET(
@@ -76,7 +73,7 @@ export async function GET(
     // Ordered and capped in the query, so a Place with hundreds of dishes
     // never fetches hundreds of rows to throw most of them away.
     .order("captured_at", { referencedTable: "entries", ascending: false })
-    .limit(MAX_ENTRIES, { referencedTable: "entries" })
+    .limit(MAX_PLACE_LOG_ENTRIES, { referencedTable: "entries" })
     .single();
 
   const place = data as PlaceRow | null;
@@ -99,9 +96,24 @@ export async function GET(
       SIGNED_URL_TTL_SECONDS,
     );
 
+  // Keyed by path rather than read positionally: Supabase documents no
+  // ordering for createSignedUrls, and a mismatch would put one dish's
+  // photo under another dish's Title -- wrong, and wrong in a way that
+  // looks deliberate.
+  const urlsByPath = new Map(
+    (signed ?? []).flatMap((result) =>
+      result.signedUrl && !result.error
+        ? [[result.path, result.signedUrl] as const]
+        : [],
+    ),
+  );
+
   // A path that can't be signed would leave a tile with no image and no
   // explanation, so treat it the same as the whole request failing.
-  if (signError || !signed || signed.some((url) => !url.signedUrl)) {
+  if (
+    signError ||
+    entries.some((entry) => !urlsByPath.has(entry.thumbnail_path))
+  ) {
     return NextResponse.json(
       { error: "Unable to load the photos for this place." },
       { status: 500 },
@@ -114,11 +126,11 @@ export async function GET(
     address: place.address,
     latitude: place.latitude,
     longitude: place.longitude,
-    entries: entries.map((entry, index) => ({
+    entries: entries.map((entry) => ({
       id: entry.id,
       title: entry.title,
       captured_at: entry.captured_at,
-      thumbnail_url: signed[index].signedUrl!,
+      thumbnail_url: urlsByPath.get(entry.thumbnail_path) as string,
       width: entry.width,
       height: entry.height,
     })),

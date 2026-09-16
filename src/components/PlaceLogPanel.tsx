@@ -7,6 +7,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
 import type { PlaceLog } from "@/app/api/place-logs/[id]/route";
+import { skeletonCount } from "@/lib/place-logs";
 import DishGallery, { DishGallerySkeleton } from "./DishGallery";
 
 /**
@@ -33,7 +34,11 @@ export default function PlaceLogPanel({
     setFailed(false);
     (async () => {
       try {
-        const res = await fetch(`/api/place-logs/${summary.id}`);
+        // no-store: the payload's thumbnail URLs are signed for an hour,
+        // so a cached one would hand back URLs that have since expired.
+        const res = await fetch(`/api/place-logs/${summary.id}`, {
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to load place log");
         const data = (await res.json()) as { placeLog: PlaceLog };
         if (active) setPlaceLog(data.placeLog);
@@ -62,7 +67,7 @@ export default function PlaceLogPanel({
       ) : placeLog ? (
         <DishGallery entries={placeLog.entries} />
       ) : (
-        <DishGallerySkeleton count={summary.entry_count} />
+        <DishGallerySkeleton count={skeletonCount(summary.entry_count)} />
       )}
     </Box>
   );
