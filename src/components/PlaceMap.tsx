@@ -12,7 +12,7 @@ import Snackbar from "@mui/material/Snackbar";
 import PlaceIcon from "@mui/icons-material/Place";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
-import { INITIAL_FIT, fitBounds, pinColor, pinZIndex } from "@/lib/map/pins";
+import { INITIAL_FIT, fitBounds, pinStyle } from "@/lib/map/pins";
 
 // Scoped to styles and fonts and URL-restricted at Mapbox -- the secret
 // MAPBOX_TOKEN keeps its search scopes and never reaches the browser. See
@@ -120,14 +120,16 @@ export default function PlaceMap({
           onError={() => setLocateFailed(true)}
         />
         {placeLogs.map((placeLog) => {
-          const selected = placeLog.id === selectedId;
+          const { fontSize, color, zIndex } = pinStyle(
+            placeLog.id === selectedId,
+          );
           return (
             <Marker
               key={placeLog.id}
               longitude={placeLog.longitude}
               latitude={placeLog.latitude}
               anchor="bottom"
-              style={{ zIndex: pinZIndex(selected) }}
+              style={{ zIndex }}
               onClick={(event) => {
                 // Without this the map treats the tap as a map click.
                 event.originalEvent.stopPropagation();
@@ -138,8 +140,8 @@ export default function PlaceMap({
                 aria-label={placeLog.name}
                 sx={{
                   cursor: "pointer",
-                  fontSize: selected ? 44 : 32,
-                  color: pinColor(selected),
+                  fontSize,
+                  color,
                   filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))",
                 }}
               />

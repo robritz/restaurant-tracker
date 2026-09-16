@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
-import { INITIAL_FIT, fitBounds, pinColor, pinZIndex } from "./pins";
+
+// Asserted by name rather than by hex, so recolouring the pins is one
+// edit -- but red and green are the ask, so the test says which is which.
+const PIN_RED = "#d32f2f";
+const PIN_GREEN = "#00c853";
+import { INITIAL_FIT, fitBounds, pinStyle } from "./pins";
 
 function placeLog(
   id: string,
@@ -37,15 +42,17 @@ describe("fitBounds", () => {
   });
 });
 
-describe("pinZIndex", () => {
-  it("lifts the selected pin above its neighbours", () => {
-    expect(pinZIndex(true)).toBeGreaterThan(pinZIndex(false));
-  });
-});
-
-describe("pinColor", () => {
+describe("pinStyle", () => {
   it("is red until a Place is selected, and green once it is", () => {
-    expect(pinColor(false)).toBe("error.main");
-    expect(pinColor(true)).toBe("success.main");
+    expect(pinStyle(false).color).toBe(PIN_RED);
+    expect(pinStyle(true).color).toBe(PIN_GREEN);
+  });
+
+  it("makes the selected pin bigger, so hue is not the only thing telling it apart", () => {
+    expect(pinStyle(true).fontSize).toBeGreaterThan(pinStyle(false).fontSize);
+  });
+
+  it("lifts the selected pin above its neighbours", () => {
+    expect(pinStyle(true).zIndex).toBeGreaterThan(pinStyle(false).zIndex);
   });
 });
