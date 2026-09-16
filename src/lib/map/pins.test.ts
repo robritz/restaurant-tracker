@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
-import { INITIAL_FIT, fitBounds, pinZIndex } from "./pins";
+import { INITIAL_FIT, fitBounds, pinStyle } from "./pins";
 
 function placeLog(
   id: string,
@@ -37,8 +37,12 @@ describe("fitBounds", () => {
   });
 });
 
-describe("pinZIndex", () => {
+describe("pinStyle", () => {
+  it("makes the selected pin bigger, so hue is not the only thing telling it apart", () => {
+    expect(pinStyle(true).fontSize).toBeGreaterThan(pinStyle(false).fontSize);
+  });
+
   it("lifts the selected pin above its neighbours", () => {
-    expect(pinZIndex(true)).toBeGreaterThan(pinZIndex(false));
+    expect(pinStyle(true).zIndex).toBeGreaterThan(pinStyle(false).zIndex);
   });
 });

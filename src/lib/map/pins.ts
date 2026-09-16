@@ -22,12 +22,28 @@ export function fitBounds(
 }
 
 /**
- * With a panel that never closes, the pin is the only thing telling you
- * which Place you are reading about, so it must not sit behind a
- * neighbour. Stacking is set explicitly rather than by render order:
- * `react-map-gl` appends each Marker's element to the map on mount, so
- * reordering the React children leaves the DOM order alone.
+ * Everything about a pin that turns on whether its Place is the selected
+ * one. Kept together because they are one decision -- "make the selected
+ * pin unmistakable" -- and splitting them across this file and the JSX
+ * meant two edits to change one thing.
+ *
+ * Red for a pin, green for the selected one, straight from the ask. Hexes
+ * rather than palette slots: `error.main` would repaint every pin the
+ * colour the app uses to say something has gone wrong, and would follow
+ * any later tint of it. The two also differ in lightness, not just hue,
+ * which is what the size difference is for as well -- red and green are
+ * the pair that red-green colour blindness collapses.
+ *
+ * Stacking is set explicitly rather than by render order: `react-map-gl`
+ * appends each Marker's element to the map on mount, so reordering the
+ * React children leaves the DOM order alone.
  */
-export function pinZIndex(selected: boolean): number {
-  return selected ? 1 : 0;
+export function pinStyle(selected: boolean): {
+  fontSize: number;
+  color: string;
+  zIndex: number;
+} {
+  return selected
+    ? { fontSize: 44, color: "#f26419", zIndex: 1 }
+    : { fontSize: 32, color: "#0770bb", zIndex: 0 };
 }
