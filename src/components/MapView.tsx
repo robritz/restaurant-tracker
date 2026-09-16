@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
@@ -9,12 +10,18 @@ import Typography from "@mui/material/Typography";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
 import PlaceLogList from "./PlaceLogList";
+import PlaceLogPanel from "./PlaceLogPanel";
+import PlaceMap from "./PlaceMap";
 
 type Status = "loading" | "ready" | "error";
 
+/** The selected Place, in the URL so it survives refresh and is linkable. */
+const SELECTED_PARAM = "place";
+
 // The map keeps a fixed share of the screen so it never scrolls away while
-// the panel below it scrolls (see #14).
-const MAP_HEIGHT = "45%";
+// the panel below it scrolls (see #14). Side by side from md up, where a
+// stacked map and panel would each be a wide, short strip.
+const MAP_HEIGHT = { xs: "45dvh", md: "100%" };
 
 function EmptyState() {
   return (
@@ -34,13 +41,17 @@ function EmptyState() {
   );
 }
 
-export default function MapView() {
+export default function MapView({ visible }: { visible: boolean }) {
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const [placeLogs, setPlaceLogs] = useState<PlaceLogSummary[]>([]);
   const [status, setStatus] = useState<Status>("loading");
 
-  // Refetched on mount, which is what keeps the map current after an Entry
-  // is saved on the capture tab -- saving deliberately doesn't touch it.
+  // Refetched every time the tab is opened, which is what keeps the map
+  // current after an Entry is saved on the capture tab -- saving
+  // deliberately doesn't touch it.
   useEffect(() => {
+    if (!visible) return;
     let active = true;
     (async () => {
       try {
@@ -57,7 +68,23 @@ export default function MapView() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [visible]);
+
+  // Selecting from the list pushes, so the back gesture deselects the pin
+  // instead of leaving the app. Moving pin to pin replaces, so that one
+  // back always returns to the list rather than walking back through every
+  // pin the user looked at.
+  const select = useCallback(
+    (id: string) => {
+      const href = `/map?${SELECTED_PARAM}=${id}`;
+      if (searchParams.has(SELECTED_PARAM)) {
+        router.replace(href, { scroll: false });
+      } else {
+        router.push(href, { scroll: false });
+      }
+    },
+    [router, searchParams],
+  );
 
   if (status === "loading") {
     return (
@@ -81,34 +108,46 @@ export default function MapView() {
   // map entirely until there's something to pin.
   if (placeLogs.length === 0) return <EmptyState />;
 
+  // A link to a Place that has since lost its Entries shows the list rather
+  // than a panel describing nothing.
+  const requestedId = searchParams.get(SELECTED_PARAM);
+  const selected =
+    placeLogs.find((placeLog) => placeLog.id === requestedId) ?? null;
+
   return (
     <Box
       sx={{
         height: "100%",
         display: "flex",
-        flexDirection: "column",
+        flexDirection: { xs: "column", md: "row" },
         overflow: "hidden",
       }}
     >
       <Box
         sx={{
           height: MAP_HEIGHT,
+          width: { xs: "100%", md: "55%" },
           flexShrink: 0,
-          bgcolor: "action.hover",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
         }}
       >
-        <Typography variant="body2" color="text.secondary">
-          The map lives here.
-        </Typography>
+        <PlaceMap
+          placeLogs={placeLogs}
+          selectedId={selected?.id ?? null}
+          onSelect={select}
+          visible={visible}
+        />
       </Box>
 
-      {/* minHeight: 0 lets this scroll internally instead of growing the
-          page, which is what keeps the map above it always visible. */}
-      <Box sx={{ flex: 1, minHeight: 0, overflowY: "auto" }}>
-        <PlaceLogList placeLogs={placeLogs} />
+      {/* minHeight/minWidth 0 lets this scroll internally instead of growing
+          the page, which is what keeps the map beside it always visible. */}
+      <Box
+        sx={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: "auto" }}
+      >
+        {selected ? (
+          <PlaceLogPanel summary={selected} />
+        ) : (
+          <PlaceLogList placeLogs={placeLogs} onSelect={select} />
+        )}
       </Box>
     </Box>
   );

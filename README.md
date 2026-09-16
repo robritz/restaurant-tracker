@@ -28,9 +28,10 @@ This is V2 of my `food-sensitivity` app.
 # 1. Install dependencies
 npm install
 
-# 2. Configure your Mapbox token
+# 2. Configure your Mapbox tokens
 cp .env.local.example .env.local
-# then edit .env.local and set MAPBOX_TOKEN=...
+# then edit .env.local and set MAPBOX_TOKEN=... (server-side place search)
+# and NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN=... (the browser map)
 
 # 3. Start local Supabase (Docker), then copy the printed URL/keys into
 # .env.local
@@ -50,11 +51,12 @@ Open [http://localhost:3000](http://localhost:3000) and select a photo that has 
 | Variable                        | Description                                                    |
 | -------------------------------- | --------------------------------------------------------------- |
 | `MAPBOX_TOKEN`                   | Mapbox access token, used **server-side** only.                 |
+| `NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN` | Mapbox token for the browser map. **Shipped to the client** -- scope it to `styles:read`/`fonts:read` and URL-restrict it at Mapbox. |
 | `SUPABASE_URL`                   | Supabase project URL. **Server-side only.**                     |
 | `SUPABASE_ANON_KEY`              | Supabase anon/publishable key (RLS-enforced). **Server-side only.** |
 | `SUPABASE_SERVICE_ROLE_KEY`      | Bypasses RLS. **Server-side only** -- never exposed to the browser. |
 
-`MAPBOX_TOKEN` is read only inside the `/api/places` route, so it is never exposed to the browser.
+`MAPBOX_TOKEN` is read only inside the `/api/places` route, so it is never exposed to the browser. The map needs a token in the browser and cannot use that one, which is why there are two -- see [ADR 0002](docs/adr/0002-separate-public-mapbox-token.md). Without `NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN` the map tab explains that the map is unconfigured and logs an error in development; the list of places keeps working.
 
 ## Supabase
 

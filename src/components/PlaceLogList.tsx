@@ -3,6 +3,7 @@
 import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
 import ListItem from "@mui/material/ListItem";
+import ListItemButton from "@mui/material/ListItemButton";
 import ListItemText from "@mui/material/ListItemText";
 import Typography from "@mui/material/Typography";
 import { Fragment } from "react";
@@ -27,29 +28,33 @@ function capturedOn(capturedAt: string): string {
  */
 export default function PlaceLogList({
   placeLogs,
+  onSelect,
 }: {
   placeLogs: PlaceLogSummary[];
+  onSelect: (id: string) => void;
 }) {
   return (
     <List disablePadding>
       {placeLogs.map((placeLog, index) => (
         <Fragment key={placeLog.id}>
           {index > 0 && <Divider component="li" />}
-          <ListItem>
-            <ListItemText
-              primary={placeLog.name}
-              secondary={
-                <>
-                  <Typography variant="body2" component="span" display="block">
-                    {placeLog.address}
-                  </Typography>
-                  <Typography variant="caption" component="span">
-                    {dishes(placeLog.entry_count)} ·{" "}
-                    {capturedOn(placeLog.last_captured_at)}
-                  </Typography>
-                </>
-              }
-            />
+          <ListItem disablePadding>
+            <ListItemButton onClick={() => onSelect(placeLog.id)}>
+              <ListItemText
+                primary={placeLog.name}
+                secondary={
+                  <>
+                    <Typography variant="body2" component="span" display="block">
+                      {placeLog.address}
+                    </Typography>
+                    <Typography variant="caption" component="span">
+                      {dishes(placeLog.entry_count)} ·{" "}
+                      {capturedOn(placeLog.last_captured_at)}
+                    </Typography>
+                  </>
+                }
+              />
+            </ListItemButton>
           </ListItem>
         </Fragment>
       ))}

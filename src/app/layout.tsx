@@ -4,6 +4,7 @@ import { ThemeProvider } from "@mui/material/styles";
 import Box from "@mui/material/Box";
 import CssBaseline from "@mui/material/CssBaseline";
 import AppTabs from "@/components/AppTabs";
+import PersistentMap from "@/components/PersistentMap";
 import theme from "@/theme";
 
 export const metadata: Metadata = {
@@ -43,7 +44,7 @@ export default function RootLayout({
             >
               <AppTabs />
               <Box component="main" sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-                {children}
+                <PersistentMap>{children}</PersistentMap>
               </Box>
             </Box>
           </ThemeProvider>
