@@ -110,13 +110,52 @@ describe("middleware", () => {
     });
   });
 
-  it("returns the response updateSession built, so a refreshed session's cookies survive", async () => {
-    const refreshed = NextResponse.next();
-    refreshed.cookies.set("sb-auth-token", "refreshed");
-    updateSession.mockResolvedValue({ response: refreshed, user: { id: "user-uuid-1" } });
+  /**
+   * Refresh token rotation is on, so a refresh consumes the old token. Any
+   * branch that builds its own response and drops the cookies updateSession
+   * set has spent a refresh and thrown the result away -- which signs the
+   * caller out rather than keeping them in.
+   */
+  describe("carries refreshed cookies onto every response", () => {
+    function refreshing(user: { id: string } | null) {
+      const refreshed = NextResponse.next();
+      refreshed.cookies.set("sb-auth-token", "rotated");
+      updateSession.mockResolvedValue({ response: refreshed, user });
+    }
 
-    const response = await middleware(request("/map"));
+    it("on a pass-through", async () => {
+      refreshing({ id: "user-uuid-1" });
 
-    expect(response.cookies.get("sb-auth-token")?.value).toBe("refreshed");
+      const response = await middleware(request("/map"));
+
+      expect(response.cookies.get("sb-auth-token")?.value).toBe("rotated");
+    });
+
+    it("on the redirect away from the login screen", async () => {
+      refreshing({ id: "user-uuid-1" });
+
+      const response = await middleware(request("/login"));
+
+      expect(response.status).toBe(307);
+      expect(response.cookies.get("sb-auth-token")?.value).toBe("rotated");
+    });
+
+    it("on the redirect to the login screen", async () => {
+      refreshing(null);
+
+      const response = await middleware(request("/map"));
+
+      expect(response.status).toBe(307);
+      expect(response.cookies.get("sb-auth-token")?.value).toBe("rotated");
+    });
+
+    it("on a 401", async () => {
+      refreshing(null);
+
+      const response = await middleware(request("/api/place-logs"));
+
+      expect(response.status).toBe(401);
+      expect(response.cookies.get("sb-auth-token")?.value).toBe("rotated");
+    });
   });
 });

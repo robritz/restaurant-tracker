@@ -12,6 +12,35 @@ function requireText(body: unknown, field: string): string {
 }
 
 /**
+ * Not every failed sign-in is a wrong password. Flattening a rate limit or an
+ * outage into "check your password" sends someone to re-type a password they
+ * typed correctly, and keeps them there.
+ */
+function signInFailure(status: number | undefined) {
+  if (status === 429) {
+    return NextResponse.json(
+      { error: "Too many sign-in attempts. Wait a few minutes and try again." },
+      { status: 429 },
+    );
+  }
+
+  if (status === 400 || status === 401 || status === 403) {
+    // Deliberately the same message whether the email is unknown or the
+    // password is wrong: saying which would tell an attacker that an address
+    // has an account here.
+    return NextResponse.json(
+      { error: "That email and password don't match." },
+      { status: 401 },
+    );
+  }
+
+  return NextResponse.json(
+    { error: "Unable to sign in right now. Try again shortly." },
+    { status: 503 },
+  );
+}
+
+/**
  * Exchanges an email and password for a session, set as cookies on the
  * response.
  *
@@ -39,15 +68,7 @@ export async function POST(request: Request) {
   const supabase = await createSupabaseServerClient();
   const { error } = await supabase.auth.signInWithPassword({ email, password });
 
-  if (error) {
-    // Deliberately the same message whether the email is unknown or the
-    // password is wrong: saying which would tell an attacker that an address
-    // has an account here.
-    return NextResponse.json(
-      { error: "That email and password don't match." },
-      { status: 401 },
-    );
-  }
+  if (error) return signInFailure(error.status);
 
   return NextResponse.json({ ok: true });
 }

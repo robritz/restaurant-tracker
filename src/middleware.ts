@@ -24,6 +24,23 @@ function isApi(pathname: string): boolean {
 }
 
 /**
+ * Moves any cookies a token refresh produced onto the response actually being
+ * returned.
+ *
+ * Refresh token rotation is on, so refreshing *consumes* the old token. A
+ * branch that builds its own response -- a redirect, a 401 -- and returns it
+ * bare has spent the refresh and thrown the new token away, signing the
+ * caller out on the next request. Every exit from the middleware goes through
+ * here.
+ */
+function carryingSession(session: NextResponse, response: NextResponse): NextResponse {
+  for (const cookie of session.cookies.getAll()) {
+    response.cookies.set(cookie);
+  }
+  return response;
+}
+
+/**
  * The single point where "everything is behind the login" is enforced, and
  * the only place the session is refreshed.
  *
@@ -39,7 +56,7 @@ export async function middleware(request: NextRequest) {
     // Nothing to do at the login screen once you are signed in. Landing there
     // with a live session and being asked to sign in again reads as a bug.
     if (user && pathname === LOGIN_PATH) {
-      return NextResponse.redirect(new URL("/", request.url));
+      return carryingSession(response, NextResponse.redirect(new URL("/", request.url)));
     }
     return response;
   }
@@ -47,9 +64,12 @@ export async function middleware(request: NextRequest) {
   if (user) return response;
 
   if (isApi(pathname)) {
-    return NextResponse.json(
-      { error: "You must be signed in to do that." },
-      { status: 401 },
+    return carryingSession(
+      response,
+      NextResponse.json(
+        { error: "You must be signed in to do that." },
+        { status: 401 },
+      ),
     );
   }
 
@@ -57,7 +77,7 @@ export async function middleware(request: NextRequest) {
   // Preserved whole, query string included, so a link to a specific pin
   // survives the detour through the login screen.
   login.searchParams.set("next", `${pathname}${search}`);
-  return NextResponse.redirect(login);
+  return carryingSession(response, NextResponse.redirect(login));
 }
 
 export const config = {
