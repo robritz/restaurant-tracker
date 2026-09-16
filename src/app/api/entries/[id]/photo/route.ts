@@ -1,9 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
-
-const PHOTO_BUCKET = "entry-photos";
-
-const SIGNED_URL_TTL_SECONDS = 3600;
+import { PHOTO_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/photos";
 
 /**
  * A short-lived URL for one Entry's full-resolution photo, signed only when

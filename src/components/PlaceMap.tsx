@@ -1,12 +1,10 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Map, {
   GeolocateControl,
   Marker,
-  NavigationControl,
   type MapRef,
-  type ViewState,
 } from "react-map-gl/mapbox";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -22,38 +20,15 @@ const MAPBOX_TOKEN = process.env.NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN;
 
 const MAP_STYLE = "mapbox://styles/mapbox/streets-v12";
 
-// A single pin has no footprint to frame, so it gets a neighbourhood zoom
-// rather than the meaningless one that fitting a zero-sized box produces.
-const SINGLE_PLACE_ZOOM = 14;
+// A single pin's bounds have zero area, so fitting them would zoom to a
+// meaningless level. Clamping gives it a neighbourhood instead.
+const MAX_INITIAL_ZOOM = 14;
 
 const FIT_PADDING = 56;
 
-// Where the map was left, so switching to the capture tab and back doesn't
-// cost the user their position. Session-scoped: a new session should open
-// framed to the whole footprint again.
-const VIEW_STATE_KEY = "map-view-state";
-
-type StoredView = Pick<ViewState, "longitude" | "latitude" | "zoom">;
-
-function readStoredView(): StoredView | null {
-  try {
-    const raw = sessionStorage.getItem(VIEW_STATE_KEY);
-    return raw ? (JSON.parse(raw) as StoredView) : null;
-  } catch {
-    return null;
-  }
-}
-
-function storeView(view: StoredView) {
-  try {
-    sessionStorage.setItem(VIEW_STATE_KEY, JSON.stringify(view));
-  } catch {
-    // A browser refusing session storage costs the user their position on a
-    // tab switch and nothing else.
-  }
-}
-
-function bounds(placeLogs: PlaceLogSummary[]): [number, number, number, number] {
+function bounds(
+  placeLogs: PlaceLogSummary[],
+): [number, number, number, number] {
   const longitudes = placeLogs.map((placeLog) => placeLog.longitude);
   const latitudes = placeLogs.map((placeLog) => placeLog.latitude);
   return [
@@ -64,82 +39,52 @@ function bounds(placeLogs: PlaceLogSummary[]): [number, number, number, number] 
   ];
 }
 
-function initialViewState(placeLogs: PlaceLogSummary[]) {
-  const stored = readStoredView();
-  if (stored) return stored;
-
-  if (placeLogs.length === 1) {
-    return {
-      longitude: placeLogs[0].longitude,
-      latitude: placeLogs[0].latitude,
-      zoom: SINGLE_PLACE_ZOOM,
-    };
-  }
-
-  return {
-    bounds: bounds(placeLogs),
-    fitBoundsOptions: { padding: FIT_PADDING, maxZoom: SINGLE_PLACE_ZOOM },
-  };
-}
-
-function MapUnavailable({ message }: { message: string }) {
-  return (
-    <Box
-      sx={{
-        height: "100%",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        p: 2,
-        bgcolor: "action.hover",
-      }}
-    >
-      <Alert severity="warning">{message}</Alert>
-    </Box>
-  );
-}
-
 /**
  * One pin per Place, framed on open to everywhere the family has eaten.
  * Selection lives above this component (in the URL), so the map is told
  * which pin is selected rather than remembering it.
+ *
+ * Mounted once and kept alive across tab navigation -- tearing the GL
+ * instance down would flash, re-download tiles, and reset the camera every
+ * time the user came back from the capture tab.
  */
 export default function PlaceMap({
   placeLogs,
   selectedId,
   onSelect,
+  visible,
 }: {
   placeLogs: PlaceLogSummary[];
   selectedId: string | null;
   onSelect: (id: string) => void;
+  /** False while another tab is on screen, since the map is never unmounted. */
+  visible: boolean;
 }) {
   const mapRef = useRef<MapRef>(null);
   const [tilesFailed, setTilesFailed] = useState(false);
   const [locateFailed, setLocateFailed] = useState(false);
-  const [initialView] = useState(() => initialViewState(placeLogs));
+  // Framed from whatever was known at mount; the map keeps its own camera
+  // from then on.
+  const [initialBounds] = useState(() => bounds(placeLogs));
+
+  // The map is laid out at zero size while its tab is hidden, so it has to
+  // be told the viewport changed on the way back in.
+  useEffect(() => {
+    if (visible) mapRef.current?.resize();
+  }, [visible]);
 
   // The place being read about is the place being looked at -- true whether
   // the pin was tapped on the map or the Place was picked from the list.
+  // The camera eases to the Place's coordinates and leaves the zoom alone,
+  // so a user comparing two places keeps the view they chose.
   useEffect(() => {
     const selected = placeLogs.find((placeLog) => placeLog.id === selectedId);
     if (!selected) return;
-    mapRef.current?.flyTo({
+    mapRef.current?.easeTo({
       center: [selected.longitude, selected.latitude],
-      zoom: Math.max(mapRef.current.getZoom(), SINGLE_PLACE_ZOOM),
       duration: 800,
     });
   }, [placeLogs, selectedId]);
-
-  const rememberView = useCallback(() => {
-    const map = mapRef.current;
-    if (!map) return;
-    const center = map.getCenter();
-    storeView({
-      longitude: center.lng,
-      latitude: center.lat,
-      zoom: map.getZoom(),
-    });
-  }, []);
 
   if (!MAPBOX_TOKEN) {
     // Loud in development, because a missing token is indistinguishable
@@ -150,18 +95,25 @@ export default function PlaceMap({
       );
     }
     return (
-      <MapUnavailable message="The map isn’t configured. Your places are still listed below." />
-    );
-  }
-
-  if (tilesFailed) {
-    return (
-      <MapUnavailable message="The map couldn’t load. Your places are still listed below." />
+      <Box
+        sx={{
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          p: 2,
+          bgcolor: "action.hover",
+        }}
+      >
+        <Alert severity="warning">
+          The map isn’t configured. Your places are still listed below.
+        </Alert>
+      </Box>
     );
   }
 
   // Selected last, so it draws above its neighbours instead of behind one.
-  const ordered = [
+  const selectedLast = [
     ...placeLogs.filter((placeLog) => placeLog.id !== selectedId),
     ...placeLogs.filter((placeLog) => placeLog.id === selectedId),
   ];
@@ -172,18 +124,29 @@ export default function PlaceMap({
         ref={mapRef}
         mapboxAccessToken={MAPBOX_TOKEN}
         mapStyle={MAP_STYLE}
-        initialViewState={initialView}
-        onMoveEnd={rememberView}
+        initialViewState={{
+          bounds: initialBounds,
+          fitBoundsOptions: {
+            padding: FIT_PADDING,
+            maxZoom: MAX_INITIAL_ZOOM,
+          },
+        }}
         onError={() => setTilesFailed(true)}
+        // Mapbox reports recoverable failures through the same channel as
+        // fatal ones, so a tile that arrives late clears the message rather
+        // than leaving it up for the rest of the session.
+        onSourceData={(event) => {
+          if (event.isSourceLoaded) setTilesFailed(false);
+        }}
         style={{ height: "100%", width: "100%" }}
       >
-        <NavigationControl position="top-right" showCompass={false} />
         <GeolocateControl
           position="top-right"
           positionOptions={{ enableHighAccuracy: true }}
+          trackUserLocation={false}
           onError={() => setLocateFailed(true)}
         />
-        {ordered.map((placeLog) => {
+        {selectedLast.map((placeLog) => {
           const selected = placeLog.id === selectedId;
           return (
             <Marker
@@ -210,6 +173,23 @@ export default function PlaceMap({
           );
         })}
       </Map>
+
+      {/* Overlaid, not substituted: the map keeps its camera and its tiles,
+          and the panel beside it goes on working regardless. */}
+      {tilesFailed && (
+        <Alert
+          severity="warning"
+          sx={{
+            position: "absolute",
+            top: 8,
+            left: 8,
+            right: 56,
+            pointerEvents: "none",
+          }}
+        >
+          The map couldn’t load. Your places are still listed.
+        </Alert>
+      )}
 
       <Snackbar
         open={locateFailed}

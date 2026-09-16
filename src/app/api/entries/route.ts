@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
+import { PHOTO_BUCKET } from "@/lib/photos";
 import type { Place } from "@/app/api/places/route";
 
-const PHOTO_BUCKET = "entry-photos";
 
 // Big enough to look sharp in the gallery, small enough that a place with a
 // dozen dishes isn't tens of megabytes over mobile data.

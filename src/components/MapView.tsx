@@ -41,15 +41,17 @@ function EmptyState() {
   );
 }
 
-export default function MapView() {
+export default function MapView({ visible }: { visible: boolean }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [placeLogs, setPlaceLogs] = useState<PlaceLogSummary[]>([]);
   const [status, setStatus] = useState<Status>("loading");
 
-  // Refetched on mount, which is what keeps the map current after an Entry
-  // is saved on the capture tab -- saving deliberately doesn't touch it.
+  // Refetched every time the tab is opened, which is what keeps the map
+  // current after an Entry is saved on the capture tab -- saving
+  // deliberately doesn't touch it.
   useEffect(() => {
+    if (!visible) return;
     let active = true;
     (async () => {
       try {
@@ -66,20 +68,23 @@ export default function MapView() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [visible]);
 
-  // Pushed rather than replaced, so the back gesture deselects the pin
-  // instead of leaving the app.
+  // Selecting from the list pushes, so the back gesture deselects the pin
+  // instead of leaving the app. Moving pin to pin replaces, so that one
+  // back always returns to the list rather than walking back through every
+  // pin the user looked at.
   const select = useCallback(
     (id: string) => {
-      router.push(`/map?${SELECTED_PARAM}=${id}`, { scroll: false });
+      const href = `/map?${SELECTED_PARAM}=${id}`;
+      if (searchParams.has(SELECTED_PARAM)) {
+        router.replace(href, { scroll: false });
+      } else {
+        router.push(href, { scroll: false });
+      }
     },
-    [router],
+    [router, searchParams],
   );
-
-  const clear = useCallback(() => {
-    router.push("/map", { scroll: false });
-  }, [router]);
 
   if (status === "loading") {
     return (
@@ -129,6 +134,7 @@ export default function MapView() {
           placeLogs={placeLogs}
           selectedId={selected?.id ?? null}
           onSelect={select}
+          visible={visible}
         />
       </Box>
 
@@ -138,7 +144,7 @@ export default function MapView() {
         sx={{ flex: 1, minHeight: 0, minWidth: 0, overflowY: "auto" }}
       >
         {selected ? (
-          <PlaceLogPanel summary={selected} onClear={clear} />
+          <PlaceLogPanel summary={selected} />
         ) : (
           <PlaceLogList placeLogs={placeLogs} onSelect={select} />
         )}

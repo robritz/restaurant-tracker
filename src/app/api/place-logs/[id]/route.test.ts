@@ -46,8 +46,8 @@ function stubSupabase(
 ) {
   const single = vi.fn().mockResolvedValue({ data: place, error });
   const limit = vi.fn().mockReturnValue({ single });
-  const order = vi.fn().mockReturnValue({ single, limit });
-  const eq = vi.fn().mockReturnValue({ single, order, limit });
+  const order = vi.fn().mockReturnValue({ limit });
+  const eq = vi.fn().mockReturnValue({ order });
   const select = vi.fn().mockReturnValue({ eq });
   const from = vi.fn().mockReturnValue({ select });
 
@@ -70,7 +70,7 @@ function stubSupabase(
     storage: { from: storageFrom },
   });
 
-  return { from, select, eq, createSignedUrls, storageFrom };
+  return { from, select, eq, order, limit, createSignedUrls, storageFrom };
 }
 
 async function get(id = "place-uuid-1") {
@@ -166,6 +166,22 @@ describe("GET /api/place-logs/[id]", () => {
 
     expect(body.placeLog.entries).toHaveLength(50);
     expect(supabase.createSignedUrls.mock.calls[0][0]).toHaveLength(50);
+  });
+
+  it("asks the database for the newest dishes, capped, rather than filtering them here", async () => {
+    // A Place with hundreds of dishes shouldn't fetch hundreds of rows to
+    // throw most of them away.
+    const supabase = stubSupabase({ ...DINER, entries: [entry()] });
+
+    await get();
+
+    expect(supabase.order).toHaveBeenCalledWith("captured_at", {
+      referencedTable: "entries",
+      ascending: false,
+    });
+    expect(supabase.limit).toHaveBeenCalledWith(50, {
+      referencedTable: "entries",
+    });
   });
 
   it("404s on a Place that doesn't exist", async () => {

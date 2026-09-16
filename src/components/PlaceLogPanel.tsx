@@ -3,10 +3,8 @@
 import { useEffect, useState } from "react";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
-import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
 import type { PlaceLog } from "@/app/api/place-logs/[id]/route";
 import DishGallery, { DishGallerySkeleton } from "./DishGallery";
@@ -21,10 +19,8 @@ import DishGallery, { DishGallerySkeleton } from "./DishGallery";
  */
 export default function PlaceLogPanel({
   summary,
-  onClear,
 }: {
   summary: PlaceLogSummary;
-  onClear: () => void;
 }) {
   const [placeLog, setPlaceLog] = useState<PlaceLog | null>(null);
   const [failed, setFailed] = useState(false);
@@ -53,14 +49,6 @@ export default function PlaceLogPanel({
   return (
     <Box>
       <Stack spacing={0.5} sx={{ p: 2, pb: 1 }}>
-        <Button
-          size="small"
-          startIcon={<ArrowBackIcon />}
-          onClick={onClear}
-          sx={{ alignSelf: "flex-start", ml: -1 }}
-        >
-          All places
-        </Button>
         <Typography variant="h6">{summary.name}</Typography>
         <Typography variant="body2" color="text.secondary">
           {summary.address}

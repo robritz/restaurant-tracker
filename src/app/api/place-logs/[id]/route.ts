@@ -1,12 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
-
-const PHOTO_BUCKET = "entry-photos";
-
-// An hour is far longer than a panel session, and nothing here detects or
-// refreshes an expired URL: a PlaceLog is re-fetched every time its pin is
-// selected, which is what keeps its URLs fresh.
-const SIGNED_URL_TTL_SECONDS = 3600;
+import { PHOTO_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/photos";
 
 // Not expected to be reached -- it exists so one request can never sign an
 // unbounded number of URLs.
@@ -51,6 +45,11 @@ type PlaceRow = {
   entries: EntryRow[];
 };
 
+/**
+ * The query already orders and caps these. Re-asserting it here is what
+ * makes "newest first, at most MAX_ENTRIES" a property of the response
+ * rather than of how the query happens to be written today.
+ */
 function newestFirst(entries: EntryRow[]): EntryRow[] {
   return [...entries]
     .sort((a, b) => b.captured_at.localeCompare(a.captured_at))
@@ -74,6 +73,10 @@ export async function GET(
       "id, name, address, latitude, longitude, entries (id, title, captured_at, thumbnail_path, width, height)",
     )
     .eq("id", id)
+    // Ordered and capped in the query, so a Place with hundreds of dishes
+    // never fetches hundreds of rows to throw most of them away.
+    .order("captured_at", { referencedTable: "entries", ascending: false })
+    .limit(MAX_ENTRIES, { referencedTable: "entries" })
     .single();
 
   const place = data as PlaceRow | null;
