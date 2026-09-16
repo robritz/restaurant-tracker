@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
-import { INITIAL_FIT, drawOrder, fitBounds } from "./pins";
+import { INITIAL_FIT, fitBounds, pinZIndex } from "./pins";
 
 function placeLog(
   id: string,
@@ -37,24 +37,8 @@ describe("fitBounds", () => {
   });
 });
 
-describe("drawOrder", () => {
-  it("puts the selected Place last, so its pin draws above its neighbours", () => {
-    const placeLogs = [
-      placeLog("a", -73.9, 40.7),
-      placeLog("b", -74.2, 40.9),
-      placeLog("c", -74.0, 40.5),
-    ];
-
-    expect(drawOrder(placeLogs, "b").map((placeLog) => placeLog.id)).toEqual([
-      "a",
-      "c",
-      "b",
-    ]);
-  });
-
-  it("keeps every Place, and their order, when nothing is selected", () => {
-    const placeLogs = [placeLog("a", -73.9, 40.7), placeLog("b", -74.2, 40.9)];
-
-    expect(drawOrder(placeLogs, null)).toEqual(placeLogs);
+describe("pinZIndex", () => {
+  it("lifts the selected pin above its neighbours", () => {
+    expect(pinZIndex(true)).toBeGreaterThan(pinZIndex(false));
   });
 });

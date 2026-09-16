@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -68,12 +68,17 @@ export default function MapView({ visible }: { visible: boolean }) {
     };
   }, [visible]);
 
+  // Whether the history entry showing a selection is one this session
+  // pushed -- a selection that arrived in a shared link is not.
+  const pushedSelection = useRef(false);
+
   const select = useCallback(
     (id: string) => {
-      const { href, mode } = selectPlaceHref(
-        id,
-        searchParams.has(SELECTED_PARAM),
-      );
+      const { href, mode } = selectPlaceHref(id, {
+        hasSelection: searchParams.has(SELECTED_PARAM),
+        hasPushedSelection: pushedSelection.current,
+      });
+      if (mode === "push") pushedSelection.current = true;
       router[mode](href, { scroll: false });
     },
     [router, searchParams],

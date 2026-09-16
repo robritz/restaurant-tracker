@@ -22,17 +22,12 @@ export function fitBounds(
 }
 
 /**
- * Markers stack in the order they are rendered, so the selected Place goes
- * last -- with a panel that never closes, the pin is the only thing telling
- * you which Place you are reading about, and it must not sit behind a
- * neighbour.
+ * With a panel that never closes, the pin is the only thing telling you
+ * which Place you are reading about, so it must not sit behind a
+ * neighbour. Stacking is set explicitly rather than by render order:
+ * `react-map-gl` appends each Marker's element to the map on mount, so
+ * reordering the React children leaves the DOM order alone.
  */
-export function drawOrder(
-  placeLogs: PlaceLogSummary[],
-  selectedId: string | null,
-): PlaceLogSummary[] {
-  return [
-    ...placeLogs.filter((placeLog) => placeLog.id !== selectedId),
-    ...placeLogs.filter((placeLog) => placeLog.id === selectedId),
-  ];
+export function pinZIndex(selected: boolean): number {
+  return selected ? 1 : 0;
 }
