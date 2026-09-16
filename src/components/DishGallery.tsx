@@ -66,7 +66,11 @@ function FullScreenDish({
     let active = true;
     (async () => {
       try {
-        const res = await fetch(`/api/entries/${entry.id}/photo`);
+        // no-store: the URL that comes back is signed for an hour, and a
+        // cached response would hand back one that has since expired.
+        const res = await fetch(`/api/entries/${entry.id}/photo`, {
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to sign photo");
         const data = (await res.json()) as { url: string };
         if (active) setUrl(data.url);

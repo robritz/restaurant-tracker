@@ -136,6 +136,7 @@ src/
 │   └── DishGallery.tsx                # The dishes photographed at one Place
 ├── lib/
 │   ├── map/
+│   │   ├── geolocation.ts             # What a failed locate-me says, and for how long
 │   │   ├── pins.ts                    # Camera framing and pin stacking
 │   │   └── selection.ts               # The selected Place's URL, and push vs replace
 │   ├── photos.ts                      # Thumbnail generation
