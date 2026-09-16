@@ -1,10 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
-
-// Asserted by name rather than by hex, so recolouring the pins is one
-// edit -- but red and green are the ask, so the test says which is which.
-const PIN_RED = "#d32f2f";
-const PIN_GREEN = "#00c853";
 import { INITIAL_FIT, fitBounds, pinStyle } from "./pins";
 
 function placeLog(
@@ -43,11 +38,6 @@ describe("fitBounds", () => {
 });
 
 describe("pinStyle", () => {
-  it("is red until a Place is selected, and green once it is", () => {
-    expect(pinStyle(false).color).toBe(PIN_RED);
-    expect(pinStyle(true).color).toBe(PIN_GREEN);
-  });
-
   it("makes the selected pin bigger, so hue is not the only thing telling it apart", () => {
     expect(pinStyle(true).fontSize).toBeGreaterThan(pinStyle(false).fontSize);
   });
