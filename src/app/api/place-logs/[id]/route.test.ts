@@ -116,6 +116,70 @@ describe("GET /api/place-logs/[id]", () => {
     });
   });
 
+  it("pairs each dish with its own URL, whatever order the signer answers in", async () => {
+    const supabase = stubSupabase({
+      ...DINER,
+      entries: [
+        entry({ id: "pizza", thumbnail_path: "p/pizza-thumb.webp" }),
+        entry({
+          id: "gelato",
+          captured_at: "2025-12-01T12:00:00.000Z",
+          thumbnail_path: "p/gelato-thumb.webp",
+        }),
+      ],
+    });
+    // Supabase documents no ordering for createSignedUrls, so the route
+    // must not read it positionally -- a mismatch would caption one dish
+    // with another's photo.
+    supabase.createSignedUrls.mockResolvedValue({
+      data: [
+        {
+          path: "p/gelato-thumb.webp",
+          signedUrl: "https://signed.example/gelato",
+          error: null,
+        },
+        {
+          path: "p/pizza-thumb.webp",
+          signedUrl: "https://signed.example/pizza",
+          error: null,
+        },
+      ],
+      error: null,
+    });
+
+    const { body } = await get();
+
+    expect(
+      body.placeLog.entries.map(
+        (dish: { id: string; thumbnail_url: string }) => [
+          dish.id,
+          dish.thumbnail_url,
+        ],
+      ),
+    ).toEqual([
+      ["pizza", "https://signed.example/pizza"],
+      ["gelato", "https://signed.example/gelato"],
+    ]);
+  });
+
+  it("fails loudly when a dish's thumbnail is missing from the signer's answer", async () => {
+    const supabase = stubSupabase({ ...DINER, entries: [entry()] });
+    supabase.createSignedUrls.mockResolvedValue({
+      data: [
+        {
+          path: "somewhere/else-thumb.webp",
+          signedUrl: "https://signed.example/else",
+          error: null,
+        },
+      ],
+      error: null,
+    });
+
+    const { response } = await get();
+
+    expect(response.status).toBe(500);
+  });
+
   it("signs thumbnail URLs for an hour", async () => {
     const supabase = stubSupabase({ ...DINER, entries: [entry()] });
 

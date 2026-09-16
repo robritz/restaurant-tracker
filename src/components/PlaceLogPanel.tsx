@@ -33,7 +33,12 @@ export default function PlaceLogPanel({
     setFailed(false);
     (async () => {
       try {
-        const res = await fetch(`/api/place-logs/${summary.id}`);
+        // no-store, because the payload's signed URLs outlive nothing
+        // but the panel session: a cached one would hand back thumbnail
+        // URLs that have since expired.
+        const res = await fetch(`/api/place-logs/${summary.id}`, {
+          cache: "no-store",
+        });
         if (!res.ok) throw new Error("Failed to load place log");
         const data = (await res.json()) as { placeLog: PlaceLog };
         if (active) setPlaceLog(data.placeLog);

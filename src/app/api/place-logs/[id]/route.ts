@@ -99,9 +99,22 @@ export async function GET(
       SIGNED_URL_TTL_SECONDS,
     );
 
+  // Keyed by path rather than read positionally: Supabase documents no
+  // ordering for createSignedUrls, and a mismatch would caption one dish
+  // with another dish's photo -- wrong, and wrong in a way that looks
+  // deliberate.
+  const urlsByPath = new Map(
+    (signed ?? [])
+      .filter((url) => url.signedUrl)
+      .map((url) => [url.path, url.signedUrl]),
+  );
+
   // A path that can't be signed would leave a tile with no image and no
   // explanation, so treat it the same as the whole request failing.
-  if (signError || !signed || signed.some((url) => !url.signedUrl)) {
+  if (
+    signError ||
+    entries.some((entry) => !urlsByPath.has(entry.thumbnail_path))
+  ) {
     return NextResponse.json(
       { error: "Unable to load the photos for this place." },
       { status: 500 },
@@ -114,11 +127,11 @@ export async function GET(
     address: place.address,
     latitude: place.latitude,
     longitude: place.longitude,
-    entries: entries.map((entry, index) => ({
+    entries: entries.map((entry) => ({
       id: entry.id,
       title: entry.title,
       captured_at: entry.captured_at,
-      thumbnail_url: signed[index].signedUrl!,
+      thumbnail_url: urlsByPath.get(entry.thumbnail_path)!,
       width: entry.width,
       height: entry.height,
     })),
