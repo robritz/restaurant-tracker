@@ -12,13 +12,13 @@ This is V2 of my `food-sensitivity` app.
 - **Material UI 6** with a dark theme
 - **exifr** for client-side EXIF parsing
 - **Mapbox Search Box API** for nearby-business lookup
-- **Supabase** for data storage (Postgres + Storage for the dish photos)
+- **Supabase** for data storage (Postgres + Storage for the dish photos) and for the login
 
 ## Getting started
 
 ### Prerequisites
 
-- Node.js 18+
+- Node.js 20.9+ (the seed script uses `node --env-file`)
 - A free [Mapbox access token](https://account.mapbox.com/access-tokens/)
 - [Docker](https://docs.docker.com/get-docker/), to run Supabase locally
 
@@ -38,11 +38,22 @@ cp .env.local.example .env.local
 npm run supabase:start
 npm run supabase:status
 
-# 4. Run the dev server
+# 4. Pick a HOUSEHOLD_EMAIL and HOUSEHOLD_PASSWORD in .env.local, then create
+# the Household and its login. `npm run supabase:reset` also runs this, so a
+# reset database always leaves a working login.
+npm run seed
+
+# 5. Run the dev server
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) and select a photo that has location data.
+Open [http://localhost:3000](http://localhost:3000), sign in with the credential you seeded, and select a photo that has location data.
+
+## Accounts
+
+The app is closed: every page and every API route requires a session. There is **no self-signup** — `enable_signup` is off in `supabase/config.toml`, and the one login is created by `npm run seed` from the values in `.env.local`.
+
+That login belongs to a **Household**, which is the family rather than a person (see [`CONTEXT.md`](CONTEXT.md) and [ADR 0004](docs/adr/0004-household-owns-entries.md)). A second phone joining the same map later is a membership row, not a shared password. Entries are not yet scoped to a Household — that lands next.
 
 > **Tip:** Photos taken on a phone with location services enabled are the best test cases. Images shared via most messaging apps or social platforms have their EXIF/GPS stripped.
 
@@ -55,6 +66,9 @@ Open [http://localhost:3000](http://localhost:3000) and select a photo that has 
 | `SUPABASE_URL`                   | Supabase project URL. **Server-side only.**                     |
 | `SUPABASE_ANON_KEY`              | Supabase anon/publishable key (RLS-enforced). **Server-side only.** |
 | `SUPABASE_SERVICE_ROLE_KEY`      | Bypasses RLS. **Server-side only** -- never exposed to the browser. |
+| `HOUSEHOLD_EMAIL`                | Email for the seeded login. Read by `npm run seed` only.        |
+| `HOUSEHOLD_PASSWORD`             | Password for the seeded login. Read by `npm run seed` only.     |
+| `HOUSEHOLD_NAME`                 | Optional display name for the Household. Defaults to "Our Household". |
 
 `MAPBOX_TOKEN` is read only inside the `/api/places` route, so it is never exposed to the browser. The map needs a token in the browser and cannot use that one, which is why there are two -- see [ADR 0002](docs/adr/0002-separate-public-mapbox-token.md). Without `NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN` the map tab explains that the map is unconfigured and logs an error in development; the list of places keeps working.
 
