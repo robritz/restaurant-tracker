@@ -13,6 +13,7 @@ import PlaceIcon from "@mui/icons-material/Place";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
 import { INITIAL_FIT, fitBounds, pinStyle } from "@/lib/map/pins";
+import { geolocateFailure, type GeolocateFailure } from "@/lib/map/geolocation";
 
 // Scoped to styles and fonts and URL-restricted at Mapbox -- the secret
 // MAPBOX_TOKEN keeps its search scopes and never reaches the browser. See
@@ -44,10 +45,28 @@ export default function PlaceMap({
 }) {
   const mapRef = useRef<MapRef>(null);
   const [tilesFailed, setTilesFailed] = useState(false);
-  const [locateFailed, setLocateFailed] = useState(false);
+  // Two pieces of state for one message, because the Snackbar fades out:
+  // clearing the failure on dismiss would blank the text mid-transition, so
+  // the message outlives the open flag and is dropped once it has gone.
+  const [locateFailure, setLocateFailure] = useState<GeolocateFailure | null>(
+    null,
+  );
+  const [locateOpen, setLocateOpen] = useState(false);
   // Framed from whatever was known at mount; the map keeps its own camera
   // from then on.
   const [initialBounds] = useState(() => fitBounds(placeLogs));
+
+  // Loud in development, because a missing token is indistinguishable from
+  // a broken map by eye -- and an unrestricted or absent public token is the
+  // likeliest way this breaks in deployment. In an effect rather than in the
+  // render body so it is logged once per mount, not once per render.
+  useEffect(() => {
+    if (!MAPBOX_TOKEN && process.env.NODE_ENV === "development") {
+      console.error(
+        "NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN is not set. The map cannot render without it -- see .env.local.example.",
+      );
+    }
+  }, []);
 
   // The map is laid out at zero size while its tab is hidden, so it has to
   // be told the viewport changed on the way back in.
@@ -69,13 +88,6 @@ export default function PlaceMap({
   }, [placeLogs, selectedId]);
 
   if (!MAPBOX_TOKEN) {
-    // Loud in development, because a missing token is indistinguishable
-    // from a broken map by eye.
-    if (process.env.NODE_ENV === "development") {
-      console.error(
-        "NEXT_PUBLIC_MAPBOX_PUBLIC_TOKEN is not set. The map cannot render without it -- see .env.local.example.",
-      );
-    }
     return (
       <Box
         sx={{
@@ -87,8 +99,10 @@ export default function PlaceMap({
           bgcolor: "action.hover",
         }}
       >
+        {/* "still listed", not "listed below": the panel is below the map
+            when stacked and beside it from md up. */}
         <Alert severity="warning">
-          The map isn’t configured. Your places are still listed below.
+          The map isn’t configured. Your places are still listed.
         </Alert>
       </Box>
     );
@@ -113,11 +127,19 @@ export default function PlaceMap({
         }}
         style={{ height: "100%", width: "100%" }}
       >
+        {/* One-shot: this is "where am I relative to what we've eaten", not
+            navigation, and continuous tracking would hold the GPS on for a
+            question already answered. Centring somewhere with no pins is a
+            true answer, so nothing here treats it as a failure. */}
         <GeolocateControl
           position="top-right"
           positionOptions={{ enableHighAccuracy: true }}
           trackUserLocation={false}
-          onError={() => setLocateFailed(true)}
+          onGeolocate={() => setLocateOpen(false)}
+          onError={(event) => {
+            setLocateFailure(geolocateFailure(event.code));
+            setLocateOpen(true);
+          }}
         />
         {placeLogs.map((placeLog) => {
           const { fontSize, color, zIndex } = pinStyle(
@@ -168,13 +190,21 @@ export default function PlaceMap({
       )}
 
       <Snackbar
-        open={locateFailed}
-        autoHideDuration={5000}
-        onClose={() => setLocateFailed(false)}
+        open={locateOpen}
+        // A refused permission disables the control for the rest of the
+        // session, so its message stays until dismissed; the failures a
+        // second tap could fix fade on their own.
+        autoHideDuration={locateFailure?.persistent ? null : 5000}
+        // A tap on the map is not an acknowledgement: dismissing is the
+        // close button, so the message survives the next thing the user does.
+        onClose={(_event, reason) => {
+          if (reason !== "clickaway") setLocateOpen(false);
+        }}
+        TransitionProps={{ onExited: () => setLocateFailure(null) }}
         anchorOrigin={{ vertical: "top", horizontal: "center" }}
       >
-        <Alert severity="warning" onClose={() => setLocateFailed(false)}>
-          Couldn’t find your location.
+        <Alert severity="warning" onClose={() => setLocateOpen(false)}>
+          {locateFailure?.message}
         </Alert>
       </Snackbar>
     </Box>
