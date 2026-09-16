@@ -44,6 +44,6 @@ export function pinStyle(selected: boolean): {
   zIndex: number;
 } {
   return selected
-    ? { fontSize: 44, color: "#0770bb", zIndex: 1 }
-    : { fontSize: 32, color: "#f26419", zIndex: 0 };
+    ? { fontSize: 44, color: "#f26419", zIndex: 1 }
+    : { fontSize: 32, color: "#0770bb", zIndex: 0 };
 }
