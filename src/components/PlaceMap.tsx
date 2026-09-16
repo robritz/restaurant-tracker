@@ -12,7 +12,7 @@ import Snackbar from "@mui/material/Snackbar";
 import PlaceIcon from "@mui/icons-material/Place";
 import "mapbox-gl/dist/mapbox-gl.css";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
-import { INITIAL_FIT, fitBounds, pinZIndex } from "@/lib/map/pins";
+import { INITIAL_FIT, fitBounds, pinColor, pinZIndex } from "@/lib/map/pins";
 
 // Scoped to styles and fonts and URL-restricted at Mapbox -- the secret
 // MAPBOX_TOKEN keeps its search scopes and never reaches the browser. See
@@ -139,7 +139,7 @@ export default function PlaceMap({
                 sx={{
                   cursor: "pointer",
                   fontSize: selected ? 44 : 32,
-                  color: selected ? "primary.main" : "text.secondary",
+                  color: pinColor(selected),
                   filter: "drop-shadow(0 1px 2px rgba(0,0,0,0.4))",
                 }}
               />

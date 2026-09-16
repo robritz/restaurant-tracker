@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
-import { INITIAL_FIT, fitBounds, pinZIndex } from "./pins";
+import { INITIAL_FIT, fitBounds, pinColor, pinZIndex } from "./pins";
 
 function placeLog(
   id: string,
@@ -40,5 +40,12 @@ describe("fitBounds", () => {
 describe("pinZIndex", () => {
   it("lifts the selected pin above its neighbours", () => {
     expect(pinZIndex(true)).toBeGreaterThan(pinZIndex(false));
+  });
+});
+
+describe("pinColor", () => {
+  it("is red until a Place is selected, and green once it is", () => {
+    expect(pinColor(false)).toBe("error.main");
+    expect(pinColor(true)).toBe("success.main");
   });
 });

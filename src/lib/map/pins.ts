@@ -31,3 +31,12 @@ export function fitBounds(
 export function pinZIndex(selected: boolean): number {
   return selected ? 1 : 0;
 }
+
+/**
+ * Red for a Place you have eaten at, green for the one you are reading
+ * about. Palette tokens rather than literals, so the pins follow the theme
+ * -- and two hues apart, since size alone is a weak signal on a phone.
+ */
+export function pinColor(selected: boolean): string {
+  return selected ? "success.main" : "error.main";
+}
