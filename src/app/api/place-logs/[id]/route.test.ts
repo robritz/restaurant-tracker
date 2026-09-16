@@ -162,24 +162,6 @@ describe("GET /api/place-logs/[id]", () => {
     ]);
   });
 
-  it("fails loudly when a dish's thumbnail is missing from the signer's answer", async () => {
-    const supabase = stubSupabase({ ...DINER, entries: [entry()] });
-    supabase.createSignedUrls.mockResolvedValue({
-      data: [
-        {
-          path: "somewhere/else-thumb.webp",
-          signedUrl: "https://signed.example/else",
-          error: null,
-        },
-      ],
-      error: null,
-    });
-
-    const { response } = await get();
-
-    expect(response.status).toBe(500);
-  });
-
   it("signs thumbnail URLs for an hour", async () => {
     const supabase = stubSupabase({ ...DINER, entries: [entry()] });
 
@@ -265,6 +247,43 @@ describe("GET /api/place-logs/[id]", () => {
 
     expect(response.status).toBe(404);
   });
+
+  it("fails loudly when a dish's thumbnail is missing from the signer's answer", async () => {
+    const supabase = stubSupabase({ ...DINER, entries: [entry()] });
+    supabase.createSignedUrls.mockResolvedValue({
+      data: [
+        {
+          path: "somewhere/else-thumb.webp",
+          signedUrl: "https://signed.example/else",
+          error: null,
+        },
+      ],
+      error: null,
+    });
+
+    const { response } = await get();
+
+    expect(response.status).toBe(500);
+  });
+
+  it("fails loudly when the signer answers with no URL for a dish", async () => {
+    const supabase = stubSupabase({ ...DINER, entries: [entry()] });
+    supabase.createSignedUrls.mockResolvedValue({
+      data: [
+        {
+          path: "place-uuid-1/photo-thumb.webp",
+          signedUrl: null,
+          error: "Object not found",
+        },
+      ],
+      error: null,
+    });
+
+    const { response } = await get();
+
+    expect(response.status).toBe(500);
+  });
+
 
   it("fails loudly when signing the thumbnails fails", async () => {
     const supabase = stubSupabase({ ...DINER, entries: [entry()] });

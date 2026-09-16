@@ -159,8 +159,11 @@ export default function DishGallery({ entries }: { entries: PlaceLogEntry[] }) {
               />
               <Typography
                 variant="caption"
-                component="p"
+                // A <p> inside the tile's <button> is invalid HTML, so
+                // this is a span made to behave like one.
+                component="span"
                 sx={{
+                  display: "block",
                   mt: 0.5,
                   color: "text.primary",
                   // A dish name is free text: it has to wrap rather than

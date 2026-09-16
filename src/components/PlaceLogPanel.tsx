@@ -7,6 +7,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
 import type { PlaceLog } from "@/app/api/place-logs/[id]/route";
+import { skeletonCount } from "@/lib/place-logs";
 import DishGallery, { DishGallerySkeleton } from "./DishGallery";
 
 /**
@@ -33,9 +34,8 @@ export default function PlaceLogPanel({
     setFailed(false);
     (async () => {
       try {
-        // no-store, because the payload's signed URLs outlive nothing
-        // but the panel session: a cached one would hand back thumbnail
-        // URLs that have since expired.
+        // no-store: the payload's thumbnail URLs are signed for an hour,
+        // so a cached one would hand back URLs that have since expired.
         const res = await fetch(`/api/place-logs/${summary.id}`, {
           cache: "no-store",
         });
@@ -67,7 +67,7 @@ export default function PlaceLogPanel({
       ) : placeLog ? (
         <DishGallery entries={placeLog.entries} />
       ) : (
-        <DishGallerySkeleton count={summary.entry_count} />
+        <DishGallerySkeleton count={skeletonCount(summary.entry_count)} />
       )}
     </Box>
   );
