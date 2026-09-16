@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
@@ -9,14 +9,12 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
 import type { PlaceLogSummary } from "@/app/api/place-logs/route";
+import { SELECTED_PARAM, selectPlaceHref } from "@/lib/map/selection";
 import PlaceLogList from "./PlaceLogList";
 import PlaceLogPanel from "./PlaceLogPanel";
 import PlaceMap from "./PlaceMap";
 
 type Status = "loading" | "ready" | "error";
-
-/** The selected Place, in the URL so it survives refresh and is linkable. */
-const SELECTED_PARAM = "place";
 
 // The map keeps a fixed share of the screen so it never scrolls away while
 // the panel below it scrolls (see #14). Side by side from md up, where a
@@ -70,18 +68,18 @@ export default function MapView({ visible }: { visible: boolean }) {
     };
   }, [visible]);
 
-  // Selecting from the list pushes, so the back gesture deselects the pin
-  // instead of leaving the app. Moving pin to pin replaces, so that one
-  // back always returns to the list rather than walking back through every
-  // pin the user looked at.
+  // Whether the history entry showing a selection is one this session
+  // pushed -- a selection that arrived in a shared link is not.
+  const pushedSelection = useRef(false);
+
   const select = useCallback(
     (id: string) => {
-      const href = `/map?${SELECTED_PARAM}=${id}`;
-      if (searchParams.has(SELECTED_PARAM)) {
-        router.replace(href, { scroll: false });
-      } else {
-        router.push(href, { scroll: false });
-      }
+      const { href, mode } = selectPlaceHref(id, {
+        hasSelection: searchParams.has(SELECTED_PARAM),
+        hasPushedSelection: pushedSelection.current,
+      });
+      if (mode === "push") pushedSelection.current = true;
+      router[mode](href, { scroll: false });
     },
     [router, searchParams],
   );
