@@ -1,10 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import { AppRouterCacheProvider } from "@mui/material-nextjs/v15-appRouter";
 import { ThemeProvider } from "@mui/material/styles";
-import Box from "@mui/material/Box";
 import CssBaseline from "@mui/material/CssBaseline";
-import AppTabs from "@/components/AppTabs";
-import PersistentMap from "@/components/PersistentMap";
 import theme from "@/theme";
 
 export const metadata: Metadata = {
@@ -18,6 +15,11 @@ export const viewport: Viewport = {
   viewportFit: "cover",
 };
 
+/**
+ * Theme and document shell only. The tab bar and the persistent map belong to
+ * the signed-in app, not to every page -- the login screen has no tabs to
+ * show and no map to keep alive -- so they live in the (app) group's layout.
+ */
 export default function RootLayout({
   children,
 }: {
@@ -29,24 +31,7 @@ export default function RootLayout({
         <AppRouterCacheProvider>
           <ThemeProvider theme={theme}>
             <CssBaseline />
-            {/*
-              Dynamic viewport units, not vh: mobile browser chrome showing
-              and hiding would otherwise clip the bottom of a pane that is
-              meant to fill the screen. `minHeight: 0` on the main region
-              lets a child own its own scrolling instead of growing the page.
-            */}
-            <Box
-              sx={{
-                height: "100dvh",
-                display: "flex",
-                flexDirection: "column",
-              }}
-            >
-              <AppTabs />
-              <Box component="main" sx={{ flex: 1, minHeight: 0, overflow: "auto" }}>
-                <PersistentMap>{children}</PersistentMap>
-              </Box>
-            </Box>
+            {children}
           </ThemeProvider>
         </AppRouterCacheProvider>
       </body>
