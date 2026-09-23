@@ -6,7 +6,18 @@ vi.mock("@/lib/supabase/client", () => ({
   createSupabaseServiceRoleClient: () => createSupabaseServiceRoleClient(),
 }));
 
+const requireHousehold = vi.fn();
+vi.mock("@/lib/auth/household", async (importOriginal) => ({
+  // The real NO_HOUSEHOLD_MESSAGE, so a test asserting the copy cannot pass
+  // against a stale duplicate of it.
+  ...(await importOriginal<typeof import("@/lib/auth/household")>()),
+  requireHousehold: () => requireHousehold(),
+}));
+
 import { POST } from "./route";
+import { NO_HOUSEHOLD_MESSAGE } from "@/lib/auth/household";
+
+const HOUSEHOLD_ID = "household-uuid-1";
 
 const EXISTING_PLACE = {
   id: "place-uuid-1",
@@ -19,6 +30,7 @@ const EXISTING_PLACE = {
 
 type SupabaseStub = {
   upsert: ReturnType<typeof vi.fn>;
+  placeSelect: ReturnType<typeof vi.fn>;
   insert: ReturnType<typeof vi.fn>;
   upload: ReturnType<typeof vi.fn>;
   remove: ReturnType<typeof vi.fn>;
@@ -26,17 +38,30 @@ type SupabaseStub = {
   from: ReturnType<typeof vi.fn>;
 };
 
+/**
+ * Two clients, matching the route. Rows -- the Household lookup, the Place,
+ * the Entry -- go through the RLS-enforced client; only the bucket uses the
+ * service role (docs/adr/0005-service-role-for-storage-only.md).
+ *
+ * `household` defaults to a caller who is in one Household, which is what
+ * the seed always produces.
+ */
 function stubSupabase(
   overrides: {
     place?: { data: unknown; error: unknown };
+    placeInsert?: { error: unknown };
     entry?: { data: unknown; error: unknown };
     upload?: { data: unknown; error: unknown };
+    /** false stands for a caller who belongs to no Household. */
+    household?: false;
   } = {},
 ): SupabaseStub {
   const placeResult = overrides.place ?? { data: EXISTING_PLACE, error: null };
+  const placeInsertResult = overrides.placeInsert ?? { error: null };
   const entryResult = overrides.entry ?? {
     data: {
       id: "entry-uuid-1",
+      household_id: HOUSEHOLD_ID,
       place_id: EXISTING_PLACE.id,
       title: "Margherita Pizza",
       photo_path: "place-uuid-1/photo.jpg",
@@ -50,9 +75,12 @@ function stubSupabase(
     error: null,
   };
 
-  const upsert = vi.fn().mockReturnValue({
-    select: vi.fn().mockReturnValue({
-      single: vi.fn().mockResolvedValue(placeResult),
+  // Awaited directly: ON CONFLICT DO NOTHING returns no row, so the route
+  // reads the Place back through placeSelect rather than off the insert.
+  const upsert = vi.fn().mockResolvedValue(placeInsertResult);
+  const placeSelect = vi.fn().mockReturnValue({
+    eq: vi.fn().mockReturnValue({
+      maybeSingle: vi.fn().mockResolvedValue(placeResult),
     }),
   });
   const insert = vi.fn().mockReturnValue({
@@ -63,16 +91,21 @@ function stubSupabase(
   const upload = vi.fn().mockResolvedValue(uploadResult);
   const remove = vi.fn().mockResolvedValue({ data: null, error: null });
   const storageFrom = vi.fn().mockReturnValue({ upload, remove });
+
   const from = vi.fn((table: string) =>
-    table === "places" ? { upsert } : { insert },
+    table === "places" ? { upsert, select: placeSelect } : { insert },
   );
 
+  requireHousehold.mockResolvedValue(
+    overrides.household === false
+      ? null
+      : { supabase: { from }, householdId: HOUSEHOLD_ID },
+  );
   createSupabaseServiceRoleClient.mockReturnValue({
-    from,
     storage: { from: storageFrom },
   });
 
-  return { upsert, insert, upload, remove, storageFrom, from };
+  return { upsert, placeSelect, insert, upload, remove, storageFrom, from };
 }
 
 /**
@@ -135,13 +168,14 @@ async function post(form: FormData) {
 describe("POST /api/entries", () => {
   beforeEach(() => {
     createSupabaseServiceRoleClient.mockReset();
+    requireHousehold.mockReset();
   });
 
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it("upserts the place on its Mapbox id so a repeat visit reuses one row", async () => {
+  it("resolves the place on its Mapbox id so a repeat visit reuses one row", async () => {
     const supabase = stubSupabase();
 
     await post(entryFormData());
@@ -154,8 +188,34 @@ describe("POST /api/entries", () => {
         latitude: 40.0,
         longitude: -73.0,
       },
-      { onConflict: "mapbox_id" },
+      { onConflict: "mapbox_id", ignoreDuplicates: true },
     );
+  });
+
+  it("never overwrites a Place another Household recorded first", async () => {
+    // ignoreDuplicates is ON CONFLICT DO NOTHING. It is not a style choice:
+    // `places` grants update to nobody, so the plain upsert this replaced
+    // is refused by RLS outright -- every repeat visit to a known restaurant
+    // would fail. Leaving the row alone is also what story 22 asks for, so
+    // a shared Place's name and address cannot change under anyone's Pins.
+    const supabase = stubSupabase();
+
+    await post(entryFormData());
+
+    expect(supabase.upsert.mock.calls[0][1]).toMatchObject({
+      ignoreDuplicates: true,
+    });
+  });
+
+  it("reads the Place back rather than trusting the insert to return it", async () => {
+    // DO NOTHING returns no row on conflict, which is the common case: the
+    // restaurant is usually already known. The read-back is the only branch
+    // that answers both that and the first-ever visit.
+    const supabase = stubSupabase();
+
+    await post(entryFormData());
+
+    expect(supabase.placeSelect).toHaveBeenCalled();
   });
 
   it("uploads the photo to the entry photos bucket", async () => {
@@ -165,7 +225,9 @@ describe("POST /api/entries", () => {
 
     expect(supabase.storageFrom).toHaveBeenCalledWith("entry-photos");
     const [path, file, options] = supabase.upload.mock.calls[0];
-    expect(path).toMatch(/^place-uuid-1\/.+\.jpg$/);
+    // Household first, then Place: everything one family uploaded sits under
+    // a single prefix, so removing their data later is a prefix delete.
+    expect(path).toMatch(/^household-uuid-1\/place-uuid-1\/.+\.jpg$/);
     expect(file).toBeInstanceOf(File);
     expect(options).toMatchObject({ contentType: "image/jpeg" });
   });
@@ -197,7 +259,7 @@ describe("POST /api/entries", () => {
     });
   });
 
-  it("inserts the entry referencing the upserted place and the stored photo", async () => {
+  it("inserts the entry referencing the resolved place and the stored photo", async () => {
     const supabase = stubSupabase();
 
     await post(entryFormData());
@@ -207,6 +269,7 @@ describe("POST /api/entries", () => {
     );
     // The landscape fixture is 1600x900, so 800px on the long edge is 800x450.
     expect(supabase.insert).toHaveBeenCalledWith({
+      household_id: HOUSEHOLD_ID,
       place_id: EXISTING_PLACE.id,
       title: "Margherita Pizza",
       photo_path: uploadedPath,
@@ -246,6 +309,66 @@ describe("POST /api/entries", () => {
     const { response } = await post(entryFormData({ [field]: "" }));
 
     expect(response.status).toBe(400);
+  });
+
+  it("records the Entry as the caller's Household", async () => {
+    // Story 14: the dish belongs to the family, not to whichever phone
+    // uploaded it. The household_id comes from the caller's membership, not
+    // from anything in the request -- the form has no field for it.
+    const supabase = stubSupabase();
+
+    await post(entryFormData());
+
+    expect(supabase.insert.mock.calls[0][0]).toMatchObject({
+      household_id: HOUSEHOLD_ID,
+    });
+  });
+
+  it("takes the Household from the session, not from the request", async () => {
+    // A form field claiming a different Household must change nothing. The
+    // insert policy would refuse a forged id anyway, but the route should
+    // never be the thing carrying it in the first place.
+    const supabase = stubSupabase();
+
+    await post(entryFormData({ household_id: "someone-elses-household" }));
+
+    expect(supabase.insert.mock.calls[0][0]).toMatchObject({
+      household_id: HOUSEHOLD_ID,
+    });
+  });
+
+  it("writes the rows as the caller and uses the service role only for the bucket", async () => {
+    // The division ADR-0005 draws. If the Entry insert ran as the service
+    // role it would bypass the very policy that makes ownership real.
+    const supabase = stubSupabase();
+
+    await post(entryFormData());
+
+    expect(requireHousehold).toHaveBeenCalled();
+    expect(supabase.from).toHaveBeenCalledWith("entries");
+    expect(supabase.storageFrom).toHaveBeenCalledWith("entry-photos");
+  });
+
+  it("fails loudly when the credential belongs to no Household", async () => {
+    // A half-provisioned database, not a bad request: the seed creates the
+    // identity and its Household together.
+    stubSupabase({ household: false });
+
+    const { response, body } = await post(entryFormData());
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe(NO_HOUSEHOLD_MESSAGE);
+  });
+
+  it("uploads nothing when the credential belongs to no Household", async () => {
+    // Checked before the bucket is touched, so a failure here cannot strand
+    // photos with no Entry to reference them.
+    const supabase = stubSupabase({ household: false });
+
+    await post(entryFormData());
+
+    expect(supabase.upload).not.toHaveBeenCalled();
+    expect(supabase.insert).not.toHaveBeenCalled();
   });
 
   it("rejects a request with no photo", async () => {

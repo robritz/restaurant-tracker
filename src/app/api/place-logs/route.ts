@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
+import { requireHousehold, NO_HOUSEHOLD_MESSAGE } from "@/lib/auth/household";
 
 /**
  * One pin's worth of a PlaceLog: the Place, plus enough about its Entries to
@@ -42,14 +42,26 @@ function toSummary(place: PlaceRow): PlaceLogSummary {
 }
 
 export async function GET() {
-  // Service role: RLS is on with no policies, so the anon key can read
-  // nothing. Scoping to a user arrives with auth.
-  const supabase = createSupabaseServiceRoleClient();
+  // The RLS-enforced client, so every Entry this query touches is already
+  // narrowed to the caller's Household. The route names no household_id
+  // anywhere below: it cannot forget a filter it does not write.
+  //
+  // A missing Household is surfaced rather than answered with an empty list.
+  // An empty map is what "you have logged nothing yet" looks like, and a
+  // provisioning fault that borrows that appearance reads as lost data.
+  const household = await requireHousehold();
+  if (!household) {
+    return NextResponse.json({ error: NO_HOUSEHOLD_MESSAGE }, { status: 500 });
+  }
+  const { supabase } = household;
 
-  // !inner makes the join an inner one, so a Place with no Entries never
-  // comes back at all. A Place like that is the residue of a failed save --
-  // a failed Entry leaves its shared Place behind -- and is not somewhere
-  // anyone has eaten, so it must never reach the map.
+  // !inner makes the join an inner one, so a Place with no *visible* Entries
+  // never comes back at all. That covers two cases at once. A Place with no
+  // Entries is the residue of a failed save -- a failed Entry leaves its
+  // shared Place behind -- and is not somewhere anyone has eaten. A Place
+  // where only another Household has eaten is not somewhere *we* have eaten,
+  // and Places are shared, so without the join it would show up as a Pin for
+  // a meal that was never ours.
   const { data, error } = await supabase
     .from("places")
     .select(

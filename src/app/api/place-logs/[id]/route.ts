@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
+import { requireHousehold, NO_HOUSEHOLD_MESSAGE } from "@/lib/auth/household";
 import { PHOTO_BUCKET, SIGNED_URL_TTL_SECONDS } from "@/lib/photos";
 import { MAX_PLACE_LOG_ENTRIES } from "@/lib/place-logs";
 
@@ -59,10 +60,14 @@ export async function GET(
 ) {
   const { id } = await params;
 
-  // Service role: RLS is on with no policies, and the photos live in a
-  // private bucket. Signed URLs are the only form in which they reach the
-  // browser.
-  const supabase = createSupabaseServiceRoleClient();
+  // Two clients, doing two different jobs. This one is RLS-enforced, so the
+  // Entries it returns are the caller's Household's and no one else's -- the
+  // answer to "what have *we* eaten here?" rather than "what has anyone?".
+  const household = await requireHousehold();
+  if (!household) {
+    return NextResponse.json({ error: NO_HOUSEHOLD_MESSAGE }, { status: 500 });
+  }
+  const { supabase } = household;
 
   const { data, error } = await supabase
     .from("places")
@@ -78,8 +83,11 @@ export async function GET(
 
   const place = data as PlaceRow | null;
 
-  // No row, or a Place nobody has eaten at, are the same thing to a caller:
-  // there is no PlaceLog at that id.
+  // No row, a Place nobody has eaten at, and a Place where only another
+  // Household has eaten are all the same thing to a caller: there is no
+  // PlaceLog at that id. Saying "forbidden" to the third would confirm that
+  // somebody else's dishes are sitting there, which is the fact a Household
+  // is entitled to keep.
   if (error || !place || place.entries.length === 0) {
     return NextResponse.json(
       { error: "No place log found." },
@@ -89,8 +97,12 @@ export async function GET(
 
   const entries = newestFirst(place.entries);
 
-  const { data: signed, error: signError } = await supabase.storage
-    .from(PHOTO_BUCKET)
+  // The service role, and only for storage: the bucket has no policies and
+  // is protected by never handing out its key, so signing is the one thing
+  // left that needs it (docs/adr/0005-service-role-for-storage-only.md).
+  // Which paths get signed was decided above, under RLS.
+  const { data: signed, error: signError } = await createSupabaseServiceRoleClient()
+    .storage.from(PHOTO_BUCKET)
     .createSignedUrls(
       entries.map((entry) => entry.thumbnail_path),
       SIGNED_URL_TTL_SECONDS,

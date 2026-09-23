@@ -39,6 +39,7 @@ export type Database = {
           captured_at: string
           created_at: string
           height: number
+          household_id: string
           id: string
           photo_path: string
           place_id: string
@@ -50,6 +51,7 @@ export type Database = {
           captured_at: string
           created_at?: string
           height: number
+          household_id: string
           id?: string
           photo_path: string
           place_id: string
@@ -61,6 +63,7 @@ export type Database = {
           captured_at?: string
           created_at?: string
           height?: number
+          household_id?: string
           id?: string
           photo_path?: string
           place_id?: string
@@ -69,6 +72,13 @@ export type Database = {
           width?: number
         }
         Relationships: [
+          {
+            foreignKeyName: "entries_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "entries_place_id_fkey"
             columns: ["place_id"]
