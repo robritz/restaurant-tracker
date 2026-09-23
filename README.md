@@ -53,7 +53,7 @@ Open [http://localhost:3000](http://localhost:3000), sign in with the credential
 
 The app is closed: every page and every API route requires a session. There is **no self-signup** — `enable_signup` is off in `supabase/config.toml`, and the one login is created by `npm run seed` from the values in `.env.local`.
 
-That login belongs to a **Household**, which is the family rather than a person (see [`CONTEXT.md`](CONTEXT.md) and [ADR 0004](docs/adr/0004-household-owns-entries.md)). A second phone joining the same map later is a membership row, not a shared password. Entries are not yet scoped to a Household — that lands next.
+That login belongs to a **Household**, which is the family rather than a person (see [`CONTEXT.md`](CONTEXT.md) and [ADR 0004](docs/adr/0004-household-owns-entries.md)). A second phone joining the same map later is a membership row, not a shared password. Every Entry belongs to a Household, and the database enforces it: one Household's dishes are not merely filtered out of another's responses, they are not readable at all.
 
 > **Tip:** Photos taken on a phone with location services enabled are the best test cases. Images shared via most messaging apps or social platforms have their EXIF/GPS stripped.
 
@@ -158,7 +158,8 @@ Deploying the app needs `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
 | `npm run build`           | Production build                        |
 | `npm run start`           | Serve the production build              |
 | `npm run lint`            | Run ESLint                              |
-| `npm test`                | Run the test suite                      |
+| `npm test`                | Run the unit test suite (no Docker needed) |
+| `npm run test:integration` | Run the integration suite (needs local Supabase) |
 | `npm run supabase:start`  | Start local Supabase (Docker)           |
 | `npm run supabase:stop`   | Stop local Supabase                     |
 | `npm run supabase:status` | Print local Supabase URL/keys           |
@@ -214,6 +215,11 @@ src/
 │       └── env.ts                     # Reads Supabase env vars
 └── theme.ts                           # MUI dark theme
 
+test/
+├── households.ts              # Two-Household fixture for the integration suite
+├── policies.integration.test.ts  # What a signed-in member can and cannot do
+└── setup-env.ts               # Loads .env.local for the integration suite
+
 scripts/
 └── seed-household.mjs         # Creates the one Household and its login
 
@@ -226,19 +232,41 @@ supabase/
 
 `vitest` runs against files under `src/`, no browser/jsdom environment.
 Route Handlers are tested by importing the route module directly,
-constructing a `Request`, and asserting on the returned `Response` --
-mocking the outbound Mapbox `fetch` or the Supabase client as needed. See
+constructing a `Request`, and asserting on the returned `Response`.
+
+There are two suites, deliberately separate.
+
+**Unit** (`npm test`) mocks the outbound Mapbox `fetch` or the Supabase
+client, so it is hermetic and needs no Docker. It pins how each route is
+*wired*: that reads go through the RLS-enforced client, that the Household is
+stamped on a write, that a missing Entry is a 404 rather than a 403. See
 `src/app/api/places/route.test.ts` for the pattern.
 
+**Integration** (`npm run test:integration`) needs the local Supabase stack
+running (`npm run supabase:start`). It seeds **two Households** that share a
+restaurant, then runs the real route handlers against the real database,
+stubbing only `requireHousehold()` -- the seam the routes already use -- to
+hand back a genuinely signed-in client. Everything past that seam, every
+policy included, is real. Fixtures live in `src/test/households.ts` and clean
+up after themselves.
+
+The split exists because the two catch different failures. Mocking the client
+is what makes the unit suite fast, and also what makes it blind: drop the
+policy on `entries` and every unit test still passes, because the mock returns
+whatever rows it was told to. The integration suite is the one that fails.
+That boundary is invisible while only one Household exists, which is exactly
+why it is tested with two.
+
 ```bash
-npm test
+npm test                  # unit
+npm run test:integration  # boundary, needs local Supabase
 ```
 
 ## Known limitations (it's a POC)
 
 - Only surfaces `food_and_drink` businesses within a fixed ~60m radius.
 - One Household, seeded by hand -- no self-signup, and no way to invite a second login into the same Household yet.
-- Entries are not yet scoped to a Household; table writes still go through the service-role key.
+- Photo objects predating Household-keyed paths keep their old `<place>/<uuid>` layout, so "remove a Household by prefix" does not yet cover them.
 - Route handlers are tested; the UI is not.
 - Photos without EXIF GPS fall back to manual restaurant search.
 - Not optimized or hardened for production use.
