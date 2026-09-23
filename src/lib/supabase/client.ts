@@ -5,9 +5,10 @@ import type { Database } from "./database.types";
 export type SupabaseDataClient = SupabaseClient<Database>;
 
 /**
- * The RLS-enforced client. Requests are made as the signed-in caller (or
- * anonymous, until auth exists), so once RLS policies are added they'll
- * scope reads/writes automatically.
+ * The anonymous RLS-enforced client: no session is attached, so every table
+ * is empty to it now that policies are in place. Useful only where there is
+ * nothing to scope. Routes that need the signed-in caller want
+ * `createSupabaseServerClient()` in ./server instead.
  *
  * Omitting `env` reads `SUPABASE_URL`/`SUPABASE_ANON_KEY` from
  * `process.env`, which works server-side only -- neither is inlined into
@@ -23,6 +24,11 @@ export function createSupabaseClient(env?: SupabaseEnv): SupabaseDataClient {
 /**
  * Bypasses RLS entirely. Server-only (API routes, server components) --
  * never expose the service role key to the browser.
+ *
+ * Reach for this to upload to, or sign a URL from, the photo bucket, and for
+ * nothing else: tables are protected by their policies, and a table read made
+ * with this client has opted out of every one of them
+ * (docs/adr/0005-service-role-for-storage-only.md).
  */
 export function createSupabaseServiceRoleClient(): SupabaseDataClient {
   const { url, serviceRoleKey } = loadServiceRoleEnv();

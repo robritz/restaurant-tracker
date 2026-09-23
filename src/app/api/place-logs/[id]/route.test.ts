@@ -5,7 +5,18 @@ vi.mock("@/lib/supabase/client", () => ({
   createSupabaseServiceRoleClient: () => createSupabaseServiceRoleClient(),
 }));
 
+const requireHousehold = vi.fn();
+vi.mock("@/lib/auth/household", async (importOriginal) => ({
+  // The real NO_HOUSEHOLD_MESSAGE, so a test asserting the copy cannot pass
+  // against a stale duplicate of it.
+  ...(await importOriginal<typeof import("@/lib/auth/household")>()),
+  requireHousehold: () => requireHousehold(),
+}));
+
 import { GET } from "./route";
+import { NO_HOUSEHOLD_MESSAGE } from "@/lib/auth/household";
+
+const HOUSEHOLD_ID = "household-uuid-1";
 
 const DINER = {
   id: "place-uuid-1",
@@ -39,6 +50,11 @@ function entry(overrides: Partial<EntryRow> = {}): EntryRow {
 /**
  * Shapes the single-row select the route uses: one Place carrying its
  * Entries, plus the storage client the thumbnail URLs are signed with.
+ *
+ * The Place is read with the RLS-enforced client and the thumbnails are
+ * signed with the service role, so the two are stubbed separately. `entries`
+ * here is what the caller's Household can see -- another Household's dishes
+ * at the same Place never appear in it.
  */
 function stubSupabase(
   place: (typeof DINER & { entries: EntryRow[] }) | null,
@@ -65,8 +81,8 @@ function stubSupabase(
   }));
   const storageFrom = vi.fn().mockReturnValue({ createSignedUrls });
 
+  requireHousehold.mockResolvedValue({ supabase: { from }, householdId: HOUSEHOLD_ID });
   createSupabaseServiceRoleClient.mockReturnValue({
-    from,
     storage: { from: storageFrom },
   });
 
@@ -83,6 +99,7 @@ async function get(id = "place-uuid-1") {
 describe("GET /api/place-logs/[id]", () => {
   beforeEach(() => {
     createSupabaseServiceRoleClient.mockReset();
+    requireHousehold.mockReset();
   });
 
   it("returns the Place with its dishes", async () => {
@@ -230,12 +247,49 @@ describe("GET /api/place-logs/[id]", () => {
     });
   });
 
+  it("fails loudly when the credential belongs to no Household", async () => {
+    // Distinct from the 404s below: those mean "no PlaceLog here", this
+    // means the sign-in itself is not attached to anything.
+    stubSupabase({ ...DINER, entries: [entry()] });
+    requireHousehold.mockResolvedValue(null);
+
+    const { response, body } = await get();
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe(NO_HOUSEHOLD_MESSAGE);
+  });
+
   it("404s on a Place that doesn't exist", async () => {
     stubSupabase(null, { code: "PGRST116", message: "no rows" });
 
     const { response } = await get("nope");
 
     expect(response.status).toBe(404);
+  });
+
+  it("reads the dishes as the caller, not as the service role", async () => {
+    // Story 16: the gallery answers "what have *we* eaten here?". It does so
+    // because the Entries are read under RLS -- the service role would
+    // answer "what has anyone eaten here?" and leak the difference.
+    stubSupabase({ ...DINER, entries: [entry()] });
+
+    await get();
+
+    expect(requireHousehold).toHaveBeenCalled();
+  });
+
+  it("404s on a shared Place where only another Household has eaten", async () => {
+    // RLS leaves the Place readable -- Places are shared -- but hides their
+    // Entries, so the Place arrives carrying none. Indistinguishable from a
+    // Place nobody has eaten at, which is the point: the response must not
+    // reveal that somebody else's dishes are there (stories 17 and 18).
+    const supabase = stubSupabase({ ...DINER, entries: [] });
+
+    const { response, body } = await get();
+
+    expect(response.status).toBe(404);
+    expect(body.error).toBe("No place log found.");
+    expect(supabase.createSignedUrls).not.toHaveBeenCalled();
   });
 
   it("404s on a Place with no dishes logged at it", async () => {

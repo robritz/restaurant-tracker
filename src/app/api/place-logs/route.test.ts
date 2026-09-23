@@ -1,11 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const createSupabaseServiceRoleClient = vi.fn();
-vi.mock("@/lib/supabase/client", () => ({
-  createSupabaseServiceRoleClient: () => createSupabaseServiceRoleClient(),
+const requireHousehold = vi.fn();
+vi.mock("@/lib/auth/household", async (importOriginal) => ({
+  // The real NO_HOUSEHOLD_MESSAGE, so a test asserting the copy cannot pass
+  // against a stale duplicate of it.
+  ...(await importOriginal<typeof import("@/lib/auth/household")>()),
+  requireHousehold: () => requireHousehold(),
 }));
 
 import { GET } from "./route";
+import { NO_HOUSEHOLD_MESSAGE } from "@/lib/auth/household";
+
+const HOUSEHOLD_ID = "household-uuid-1";
 
 const DINER = {
   id: "place-uuid-1",
@@ -33,7 +39,7 @@ type PlaceRow = typeof DINER & { entries: { captured_at: string }[] };
 function stubSupabase(rows: PlaceRow[] | null, error: unknown = null) {
   const select = vi.fn().mockResolvedValue({ data: rows, error });
   const from = vi.fn().mockReturnValue({ select });
-  createSupabaseServiceRoleClient.mockReturnValue({ from });
+  requireHousehold.mockResolvedValue({ supabase: { from }, householdId: HOUSEHOLD_ID });
   return { from, select };
 }
 
@@ -44,7 +50,7 @@ async function get() {
 
 describe("GET /api/place-logs", () => {
   beforeEach(() => {
-    createSupabaseServiceRoleClient.mockReset();
+    requireHousehold.mockReset();
   });
 
   it("returns a pin for each Place with its coordinates", async () => {
@@ -102,6 +108,35 @@ describe("GET /api/place-logs", () => {
     expect(supabase.select.mock.calls[0][0]).toContain("entries!inner");
   });
 
+  it("reads as the caller, so the join only sees our Household's Entries", async () => {
+    // These two facts together are story 15. The route names no household_id
+    // -- RLS narrows `entries` before the inner join runs, so a Place where
+    // only another family has eaten has no visible Entries and drops out of
+    // the result set on its own.
+    const supabase = stubSupabase([
+      { ...DINER, entries: [{ captured_at: "2026-01-01T12:00:00.000Z" }] },
+    ]);
+
+    await get();
+
+    expect(requireHousehold).toHaveBeenCalled();
+    expect(supabase.select.mock.calls[0][0]).toContain("entries!inner");
+  });
+
+  it("counts only the Entries the caller can see", async () => {
+    // A shared Place where we have eaten once and another Household has
+    // eaten ten times is a Pin reading 1, not 11. RLS has already dropped
+    // their rows by the time the count happens, so the Pin cannot report a
+    // number that would tell us they were there at all (stories 17 and 18).
+    stubSupabase([
+      { ...DINER, entries: [{ captured_at: "2026-01-01T12:00:00.000Z" }] },
+    ]);
+
+    const { body } = await get();
+
+    expect(body.placeLogs[0].entry_count).toBe(1);
+  });
+
   it("orders Places by most recently captured first", async () => {
     stubSupabase([
       { ...DINER, entries: [{ captured_at: "2026-01-01T12:00:00.000Z" }] },
@@ -125,6 +160,19 @@ describe("GET /api/place-logs", () => {
 
     expect(JSON.stringify(body)).not.toContain("token");
     expect(Object.keys(body.placeLogs[0])).not.toContain("thumbnail_url");
+  });
+
+  it("fails loudly when the credential belongs to no Household", async () => {
+    // Not an empty list. An empty map is what "you have logged nothing yet"
+    // looks like, and a provisioning fault wearing that appearance reads as
+    // lost data.
+    stubSupabase([]);
+    requireHousehold.mockResolvedValue(null);
+
+    const { response, body } = await get();
+
+    expect(response.status).toBe(500);
+    expect(body.error).toBe(NO_HOUSEHOLD_MESSAGE);
   });
 
   it("returns an empty list when nothing has been logged", async () => {

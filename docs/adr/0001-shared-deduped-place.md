@@ -11,3 +11,7 @@ Ownership (ADR-0004) applies to Entries, not to Places. A Place remains shared r
 The price is that the *existence* of a Place is globally visible — "someone, sometime, ate here" is shared knowledge. That is Mapbox metadata with no names attached, and it is the cost of keeping dedup working across Households.
 
 The leak boundary this creates lives in one query. `/api/place-logs` uses `entries!inner` so a Place with no Entries never reaches the map; once Entries are owned, that join must filter Entries by Household **before** deciding which Places exist, or a shared Place would betray that another Household has eaten there.
+
+As built, the filtering is not in the query at all. The route reads with the RLS-enforced client, so the policy on `entries` has already narrowed the rows before the join is evaluated — a Place where only another Household has eaten has no visible Entries and drops out on its own. The route names no `household_id`, which is the point: it cannot forget a filter it does not write.
+
+One consequence worth recording: because nobody holds `update` on `places`, `POST /api/entries` cannot resolve a Place with a plain upsert. `ON CONFLICT DO UPDATE` is checked against the update policy and refused, which would fail *every repeat visit to a known restaurant*, not merely a cross-Household edit. The route uses `ON CONFLICT DO NOTHING` and reads the row back instead.

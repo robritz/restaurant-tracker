@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import sharp from "sharp";
-import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
+import { createSupabaseServiceRoleClient, type SupabaseDataClient } from "@/lib/supabase/client";
+import { requireHousehold, NO_HOUSEHOLD_MESSAGE } from "@/lib/auth/household";
 import { PHOTO_BUCKET } from "@/lib/photos";
 import type { Place } from "@/app/api/places/route";
 
@@ -75,15 +76,23 @@ function parseEntryInput(form: FormData): EntryInput {
 /**
  * The original and its thumbnail share a name, so the pair is obvious when
  * looking at the bucket.
+ *
+ * Household first, then Place. Leading with the Household means everything
+ * one family has ever uploaded sits under a single prefix, so removing their
+ * data later is a prefix delete rather than a migration that has to join
+ * through `entries` to work out which objects were theirs. The bucket is
+ * private and these paths are never guessed at -- a signed URL is the only
+ * way in -- so the prefix is for operators, not for access control.
  */
 function photoPaths(
+  householdId: string,
   placeId: string,
   photo: File,
 ): { original: string; thumbnail: string } {
   const extension = photo.name.includes(".")
     ? photo.name.split(".").pop()!.toLowerCase()
     : "jpg";
-  const base = `${placeId}/${crypto.randomUUID()}`;
+  const base = `${householdId}/${placeId}/${crypto.randomUUID()}`;
   return { original: `${base}.${extension}`, thumbnail: `${base}-thumb.webp` };
 }
 
@@ -112,6 +121,43 @@ async function createThumbnail(photo: File): Promise<Thumbnail> {
   return { body: data, width: info.width, height: info.height };
 }
 
+type StoredPlace = Place & { id: string };
+
+/**
+ * The shared Place for this Entry, creating it the first time anyone records
+ * a meal there.
+ *
+ * Not an upsert, which is what this was before Households existed. An upsert
+ * UPDATEs on conflict, and `places` grants update to nobody: a Place is
+ * shared, so rewriting its name and address would change it under every other
+ * Household's Pins (issue #34, story 22). `ignoreDuplicates` makes this
+ * ON CONFLICT DO NOTHING, so a restaurant another family recorded first is
+ * left exactly as they recorded it -- and found, rather than duplicated
+ * (docs/adr/0001-shared-deduped-place.md).
+ */
+async function resolvePlace(
+  supabase: SupabaseDataClient,
+  place: Place,
+): Promise<StoredPlace | null> {
+  const { error: insertError } = await supabase
+    .from("places")
+    .upsert(place, { onConflict: "mapbox_id", ignoreDuplicates: true });
+
+  if (insertError) return null;
+
+  // Read back rather than returning the insert's own row: DO NOTHING returns
+  // no row on conflict, and re-reading is the one branch that answers both
+  // the "we just created it" and the "it was already there" case.
+  const { data, error } = await supabase
+    .from("places")
+    .select()
+    .eq("mapbox_id", place.mapbox_id)
+    .maybeSingle();
+
+  if (error || !data) return null;
+  return data;
+}
+
 export async function POST(request: Request) {
   let input: EntryInput;
   try {
@@ -136,27 +182,32 @@ export async function POST(request: Request) {
     );
   }
 
-  // Service role: there's no authenticated session yet to scope an
-  // RLS-enforced write to.
-  const supabase = createSupabaseServiceRoleClient();
+  // The middleware has already turned away anyone without a session, so the
+  // only way this is null is a half-provisioned database -- hence 500 rather
+  // than 403, and before the bucket is touched, so a failure here cannot
+  // strand photos with no Entry to reference them.
+  const household = await requireHousehold();
+  if (!household) {
+    return NextResponse.json({ error: NO_HOUSEHOLD_MESSAGE }, { status: 500 });
+  }
+  const { supabase, householdId } = household;
 
-  // Places are shared and deduped on mapbox_id, so a repeat visit reuses the
-  // existing row (see docs/adr/0001-shared-deduped-place.md).
-  const { data: place, error: placeError } = await supabase
-    .from("places")
-    .upsert(input.place, { onConflict: "mapbox_id" })
-    .select()
-    .single();
-
-  if (placeError || !place) {
+  const place = await resolvePlace(supabase, input.place);
+  if (!place) {
     return NextResponse.json(
       { error: "Unable to save the place for this entry." },
       { status: 500 },
     );
   }
 
-  const paths = photoPaths(place.id, input.photo);
-  const { error: uploadError } = await supabase.storage
+  // The service role, for the bucket only: it has no policies and is kept
+  // private by never handing out its key
+  // (docs/adr/0005-service-role-for-storage-only.md). The Entry row that
+  // makes these photos reachable is still written under RLS below.
+  const storage = createSupabaseServiceRoleClient();
+
+  const paths = photoPaths(householdId, place.id, input.photo);
+  const { error: uploadError } = await storage.storage
     .from(PHOTO_BUCKET)
     .upload(paths.original, input.photo, { contentType: input.photo.type });
 
@@ -167,12 +218,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const { error: thumbnailError } = await supabase.storage
+  const { error: thumbnailError } = await storage.storage
     .from(PHOTO_BUCKET)
     .upload(paths.thumbnail, thumbnail.body, { contentType: "image/webp" });
 
   if (thumbnailError) {
-    await supabase.storage.from(PHOTO_BUCKET).remove([paths.original]);
+    await storage.storage.from(PHOTO_BUCKET).remove([paths.original]);
     return NextResponse.json(
       { error: "Unable to upload the photo for this entry." },
       { status: 500 },
@@ -182,6 +233,11 @@ export async function POST(request: Request) {
   const { data: entry, error: entryError } = await supabase
     .from("entries")
     .insert({
+      // What makes this dish ours rather than whichever phone uploaded it
+      // (issue #34, story 14). The insert policy re-checks it against the
+      // caller's memberships, so a forged household_id is rejected by the
+      // database, not merely unwritten by this line.
+      household_id: householdId,
       place_id: place.id,
       title: input.title,
       photo_path: paths.original,
@@ -196,7 +252,7 @@ export async function POST(request: Request) {
   if (entryError || !entry) {
     // Don't leave the photos behind for an Entry that was never created. The
     // place row stays -- it's shared, so other Entries may reference it.
-    await supabase.storage
+    await storage.storage
       .from(PHOTO_BUCKET)
       .remove([paths.original, paths.thumbnail]);
     return NextResponse.json(

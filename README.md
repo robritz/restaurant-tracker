@@ -79,21 +79,50 @@ That login belongs to a **Household**, which is the family rather than a person 
 `places`, `entries`, `households` and `household_members`, plus the
 `entry-photos` storage bucket.
 
+Photos in that bucket are keyed `<household>/<place>/<uuid>`, so everything
+one family uploaded sits under a single prefix and removing their data later
+is a prefix delete rather than a migration that joins through `entries`. The
+bucket is private and the paths are never guessed at -- a short-lived signed
+URL is the only way in, and `/api/entries/[id]/photo` reads the Entry under
+RLS before it signs anything -- so the prefix is for operators, not access
+control.
+
 - `src/lib/supabase/client.ts` -- `createSupabaseClient()` (anonymous,
   RLS-enforced) and `createSupabaseServiceRoleClient()` (bypasses RLS;
-  server-side only). `places` and `entries` have RLS on with no policies, so
-  every write still goes through the service-role client inside
-  `POST /api/entries`. Their policies arrive when Entries gain an owner.
+  server-side only). The service-role client is now
+  reached for **only to sign and upload photos**, never to read or write a
+  table
+  (`docs/adr/0005-service-role-for-storage-only.md`). A route that uses it
+  for a table read has silently opted out of every policy below.
 - `src/lib/supabase/server.ts` -- `createSupabaseServerClient()`, the
   RLS-enforced client that runs as the signed-in caller, reading the session
   from cookies.
+- `src/lib/auth/household.ts` -- `requireHousehold()`, the one seam every
+  route that touches a table goes through. Returns the caller's Household
+  *and* that client together, since a client without the Household cannot
+  record an Entry and the id without the client invites filtering by hand.
+  It is also what the route tests mock.
 - `src/lib/supabase/middleware.ts` -- reads and refreshes the session for the
   middleware. The only place a token refresh happens.
 - `src/lib/supabase/cookies.ts` -- marks session cookies `HttpOnly`.
 - `src/lib/supabase/env.ts` -- reads the env vars above.
 
-`households` and `household_members` *do* have policies: each is readable
-only by its own members.
+Every table has policies, and they -- not the routes -- are what keep one
+Household's dishes away from another's:
+
+- `households` and `household_members` are readable only by their own members.
+- `entries` are readable and insertable only by the Household that owns them.
+  A route that forgets to filter cannot leak another Household's dishes,
+  because the rows are not there to return. There is deliberately no update
+  or delete policy; those arrive with the features that need them.
+- `places` are readable and insertable by any signed-in caller -- they are
+  shared reference data carrying no dish and no owner, which is what lets a
+  search find a restaurant another family recorded first. There is **no
+  update or delete policy for anyone**: a Place is shared, so an edit by one
+  Household would rewrite the name and address under every other Household's
+  pins. This is why `POST /api/entries` resolves a Place with
+  `ON CONFLICT DO NOTHING` rather than an upsert, which would need `update`
+  and is refused outright.
 
 ```bash
 npm run supabase:start   # starts local Supabase in Docker
@@ -169,6 +198,7 @@ src/
 │   └── DishGallery.tsx                # The dishes photographed at one Place
 ├── lib/
 │   ├── auth/
+│   │   ├── household.ts               # requireHousehold(): the caller's Household + an RLS client
 │   │   └── redirect.ts                # Where to land after signing in, minus open redirects
 │   ├── map/
 │   │   ├── geolocation.ts             # What a failed locate-me says, and for how long
