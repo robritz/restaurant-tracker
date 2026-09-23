@@ -4,13 +4,54 @@
 -- the thing that keeps one Household's dishes away from another's
 -- (docs/adr/0004-household-owns-entries.md).
 
--- NOT NULL with no backfill, for the same reason the thumbnail columns took
--- that route in 20260911010000: there is no data worth preserving, so the
--- database is reset rather than backfilled. An Entry that belongs to nobody
--- is exactly the state this migration exists to make unrepresentable, so a
--- nullable column with a "shouldn't happen" branch above it would defeat it.
+-- Added nullable, backfilled, then made NOT NULL.
+--
+-- The thumbnail columns in 20260911010000 took the other route -- NOT NULL
+-- with no backfill, on the grounds that the database would simply be reset.
+-- That reasoning held while the only database was a local one. It does not
+-- hold now: the hosted project has Entries in it, and `add column ... not
+-- null` against a non-empty table fails outright with "contains null
+-- values". Resetting to get around that would throw away real meals.
+--
+-- The end state is identical either way. An Entry that belongs to nobody is
+-- the state this migration exists to make unrepresentable, and the NOT NULL
+-- at the bottom is what makes it so; the nullable window is three statements
+-- long and closes inside the same transaction.
 alter table public.entries
-  add column household_id uuid not null references public.households (id);
+  add column household_id uuid references public.households (id);
+
+-- Every pre-existing Entry was recorded before Households existed, when the
+-- app was a single undifferentiated pile of dishes behind no login. There is
+-- exactly one Household for them to belong to, and this asserts that rather
+-- than assuming it: picking one of several would silently hand one family's
+-- meals to another, which is the precise failure the rest of this migration
+-- is built to prevent.
+do $$
+declare
+  ownerless bigint;
+  household_count bigint;
+  owner uuid;
+begin
+  select count(*) into ownerless from public.entries where household_id is null;
+  if ownerless = 0 then
+    return;
+  end if;
+
+  select count(*) into household_count from public.households;
+  if household_count <> 1 then
+    raise exception
+      'Refusing to backfill % ownerless Entries: expected exactly one Household, found %. Assign them deliberately.',
+      ownerless, household_count;
+  end if;
+
+  select id into owner from public.households;
+  update public.entries set household_id = owner where household_id is null;
+  raise notice 'Backfilled % Entries to Household %.', ownerless, owner;
+end
+$$;
+
+alter table public.entries
+  alter column household_id set not null;
 
 -- Every read below filters on household_id first; place_id narrows what is
 -- left. The existing entries_place_id_idx stays: the Place-side foreign key
