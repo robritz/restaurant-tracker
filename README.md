@@ -1,10 +1,17 @@
 # Restaurant Tracker
 
-> ⚠️ **Proof of Concept.** 
+As a family full of neurodivergent folks, we often struggle to keep track of where everyone likes to eat, and what they like to eat. Each of us has different sensory needs when it comes to food. It can often be a challenge to remember where we all like to eat together. 
 
-As a family full of neurodivergent folks, we often struggle to keep track of where everyone likes to eat, and what they like to eat. Each of us has different sensory needs when it comes to food. It can often be a challenge to remember where we all like to eat together. The goal of this app is to make this process easy and fun by centering the UX around simply taking a photo and uploading it later.
+The goal of this app is to make this process easy and fun by centering the UX around simply taking a photo and uploading it later. We can focus on snapping a quick photo of our food (like OG Instagram days). A day, week, month, or year later we can select the image to remember where we ate and save its location. 
 
-This is V2 of my `food-sensitivity` app.
+This is V2 of my `food-sensitivity` app. It is in active development.
+
+<img width="411" height="885" alt="Screenshot 2026-09-30 at 21 15 21" src="https://github.com/user-attachments/assets/b4a76fb9-d7d3-4cfb-9e3c-d8a47d7b6adb" />
+<img width="412" height="883" alt="Screenshot 2026-09-30 at 21 15 48" src="https://github.com/user-attachments/assets/83350ed1-372f-4d2d-b7b7-8313923f8de6" />
+<img width="411" height="881" alt="Screenshot 2026-09-30 at 21 16 08" src="https://github.com/user-attachments/assets/c1adf58d-8935-4ced-8fe8-02c78789a172" />
+<img width="410" height="884" alt="Screenshot 2026-09-30 at 21 16 22" src="https://github.com/user-attachments/assets/ed9e9196-9f0b-437c-b2ec-9c2a6f74a852" />
+<img width="411" height="883" alt="Screenshot 2026-09-30 at 21 16 41" src="https://github.com/user-attachments/assets/7fc2ad58-06aa-4752-aacf-52c6343730ab" />
+
 
 ## Tech stack
 
