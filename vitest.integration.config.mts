@@ -10,6 +10,12 @@ import path from "node:path";
 export default defineConfig({
   test: {
     environment: "node",
+    // Vitest's default, stated out loud because CI depends on it: a run that
+    // matches no test files, or matches a file defining none, must fail. "0
+    // tests passed" is otherwise indistinguishable from "0 tests failed", and
+    // a glob that quietly stops matching is exactly how a suite gets skipped
+    // for a month without anyone noticing.
+    passWithNoTests: false,
     include: ["src/**/*.integration.test.ts"],
     setupFiles: ["src/test/setup-env.ts"],
     // Real network round-trips, a seeded fixture per file, and storage

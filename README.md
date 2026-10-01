@@ -1,5 +1,7 @@
 # Restaurant Tracker
 
+[![CI](https://github.com/robritz/restaurant-tracker/actions/workflows/ci.yml/badge.svg)](https://github.com/robritz/restaurant-tracker/actions/workflows/ci.yml)
+
 As a family full of neurodivergent folks, we often struggle to keep track of where everyone likes to eat, and what they like to eat. Each of us has different sensory needs when it comes to food. It can often be a challenge to remember where we all like to eat together. 
 
 The goal of this app is to make this process easy and fun by centering the UX around simply taking a photo and uploading it later. We can focus on snapping a quick photo of our food (like OG Instagram days). A day, week, month, or year later we can select the image to remember where we ate and save its location. 
@@ -164,7 +166,8 @@ Deploying the app needs `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
 | `npm run dev`             | Start the development server            |
 | `npm run build`           | Production build                        |
 | `npm run start`           | Serve the production build              |
-| `npm run lint`            | Run ESLint                              |
+| `npm run lint`            | Run ESLint (currently broken -- see #48) |
+| `npm run typecheck`       | Type-check without emitting             |
 | `npm test`                | Run the unit test suite (no Docker needed) |
 | `npm run test:integration` | Run the integration suite (needs local Supabase) |
 | `npm run supabase:start`  | Start local Supabase (Docker)           |
@@ -268,6 +271,21 @@ why it is tested with two.
 npm test                  # unit
 npm run test:integration  # boundary, needs local Supabase
 ```
+
+Both suites run in CI on every pull request and on pushes to `main`
+(`.github/workflows/ci.yml`), which starts its own Supabase in the runner.
+That workflow is what actually enforces the boundary: before it existed, the
+integration suite ran only when someone remembered to type the command, which
+meant the guarantee the suite exists to protect rested on habit.
+
+The workflow deliberately fails rather than passing on an empty run --
+`passWithNoTests` is off in both configs -- so a glob that stops matching the
+integration tests is a red build, not a green one with nothing behind it.
+
+It runs the same npm scripts a developer would, so there is one definition of
+how this project is typechecked, started and tested. Linting is **not** in CI
+yet: `npm run lint` does not currently run at all (#48), and wiring a broken
+command in would only teach everyone to ignore a red step.
 
 ## Known limitations (it's a POC)
 

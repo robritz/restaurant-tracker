@@ -76,8 +76,19 @@ describe("GET /api/place-logs (two Households, real database)", () => {
     const aShared = (await mapFor("a")).find((s) => s.id === fixture.sharedPlaceId);
     const bShared = (await mapFor("b")).find((s) => s.id === fixture.sharedPlaceId);
 
-    expect(aShared?.last_captured_at).toBe(fixture.capturedAt("A's pizza"));
-    expect(bShared?.last_captured_at).toBe(fixture.capturedAt("B's ramen"));
+    // Asserted present first, so a missing summary fails as a missing summary
+    // rather than as a TypeError inside the Date constructor.
+    expect(aShared).toBeDefined();
+    expect(bShared).toBeDefined();
+
+    // Compared as instants, not as strings: Postgres trims trailing zeros
+    // from fractional seconds, so one moment has several valid renderings.
+    expect(new Date(aShared!.last_captured_at).getTime()).toBe(
+      fixture.capturedAtMs("A's pizza"),
+    );
+    expect(new Date(bShared!.last_captured_at).getTime()).toBe(
+      fixture.capturedAtMs("B's ramen"),
+    );
   });
 
   it("orders Places by your own most recent visit, newest first", async () => {

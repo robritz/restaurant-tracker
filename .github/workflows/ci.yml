@@ -1,0 +1,101 @@
+name: CI
+
+# Pull requests are the gate; pushes to main catch anything that lands without
+# one. Deliberately not every push: a branch with an open PR would otherwise
+# run the whole suite twice for one commit, and Supabase takes the bulk of the
+# time.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Reading the checkout is all this needs.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  # A second push to a branch makes the first run's answer irrelevant. Not so
+  # on main, where each run is the only signal a landed commit ever gets.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  test:
+    name: Typecheck and test
+    runs-on: ubuntu-latest
+    # Generous for a suite that takes about a minute, but finite: a Supabase
+    # start that hangs should not burn the six-hour default.
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Matches the @types/node major this repo typechecks against.
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Every step below runs the same npm script a developer would, rather
+      # than reaching for the underlying binary, so there is one definition of
+      # how this project is typechecked, started and tested.
+
+      # Cheapest first, and neither needs Docker: a type error or a broken
+      # unit test should not wait on a database starting.
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Unit tests
+        run: npm test
+
+      # Everything below is the Household boundary. The unit suite above mocks
+      # the Supabase client, so it would pass with every RLS policy dropped --
+      # these are the tests that would not.
+      - name: Start Supabase
+        run: npm run supabase:start
+
+      # The hosted project is unreachable from here by construction: the link
+      # lives in supabase/.temp, which is gitignored, so a fresh checkout is
+      # linked to nothing and the stack just started can only be local. These
+      # are that stack's fixed demo keys -- identical on every machine and
+      # useless against anything real -- read from the running stack rather
+      # than pasted here so they cannot drift.
+      #
+      # --silent so npm's own banner stays out of the captured output, and
+      # RUNNER_TEMP so the file never lands in the checkout even if a later
+      # line fails.
+      - name: Point the tests at the local stack
+        run: |
+          env_file="$RUNNER_TEMP/supabase.env"
+          npm run --silent supabase:status -- -o env > "$env_file"
+          set -a
+          . "$env_file"
+          set +a
+
+          # Fail here rather than three steps later. Without this, a stack that
+          # came up wrong exports empty strings and the red build points at the
+          # integration tests instead of at the reason they could not run.
+          : "${API_URL:?supabase status reported no API_URL}"
+          : "${ANON_KEY:?supabase status reported no ANON_KEY}"
+          : "${SERVICE_ROLE_KEY:?supabase status reported no SERVICE_ROLE_KEY}"
+
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$ANON_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+          } >> "$GITHUB_ENV"
+
+      # Fails on an empty run as well as on a failing one -- see
+      # vitest.integration.config.mts.
+      - name: Integration tests
+        run: npm run test:integration
+
+      # always() so a failed run still tears down, continue-on-error so a
+      # grumpy teardown cannot turn into a second red step competing with the
+      # one that actually broke.
+      - name: Stop Supabase
+        if: always()
+        continue-on-error: true
+        run: npm run supabase:stop
