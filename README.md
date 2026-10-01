@@ -133,6 +133,24 @@ Household's dishes away from another's:
   `ON CONFLICT DO NOTHING` rather than an upsert, which would need `update`
   and is refused outright.
 
+### Self-signup, and a trap in `[auth.email]`
+
+Self-signup is off, which is what stops a deployed URL from being an open
+door. It is turned off by the **global** `[auth] enable_signup = false` in
+`supabase/config.toml`.
+
+Not by `[auth.email] enable_signup`, which reads as though it means the same
+thing and does not: the Supabase CLI maps it to
+`GOTRUE_EXTERNAL_EMAIL_ENABLED`, so setting it to `false` disables email as a
+way of *signing in* at all. Main carried that for a fortnight -- a fresh
+checkout could seed a Household and then not log into it -- and nobody
+noticed, because a config change only takes effect on
+`supabase stop && supabase start`, and a long-running local stack keeps
+serving the settings it booted with.
+
+`src/test/auth-config.integration.test.ts` now asserts both halves against a
+running stack: a seeded member can sign in, and a stranger cannot sign up.
+
 ```bash
 npm run supabase:start   # starts local Supabase in Docker
 npm run supabase:status  # reprint the local URL/keys
