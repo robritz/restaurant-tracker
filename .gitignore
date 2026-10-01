@@ -29,3 +29,10 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Broadened from `.env*.local` by `vercel link`, which wants any stray env
+# file ignored. Kept, with the exception that matters: .env.local.example is
+# committed on purpose -- it is how the required configuration is documented
+# -- and a bare `.env*` silently matches it too.
+.env*
+!.env*.example
