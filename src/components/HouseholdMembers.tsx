@@ -29,7 +29,7 @@ export type Invite = {
   accepted_at: string | null;
 };
 
-function when(value: string): string {
+function formatDay(value: string): string {
   return new Date(value).toLocaleDateString(undefined, {
     day: "numeric",
     month: "short",
@@ -53,7 +53,11 @@ export default function HouseholdMembers({
   const [link, setLink] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
-  async function act(request: () => Promise<Response>, onOk?: (body: Record<string, unknown>) => void) {
+  /** Every button here is the same shape: call a route, then re-read the page. */
+  async function submit(
+    request: () => Promise<Response>,
+    onOk?: (body: Record<string, unknown>) => void,
+  ) {
     setBusy(true);
     setError(null);
     try {
@@ -74,7 +78,7 @@ export default function HouseholdMembers({
 
   function invite() {
     setCopied(false);
-    return act(
+    return submit(
       () => fetch("/api/invites", { method: "POST" }),
       (body) => setLink(`${window.location.origin}${body.path as string}`),
     );
@@ -117,7 +121,7 @@ export default function HouseholdMembers({
                           aria-label={`Remove ${member.email}`}
                           disabled={busy}
                           onClick={() =>
-                            act(() =>
+                            submit(() =>
                               fetch(`/api/members/${member.user_id}`, { method: "DELETE" }),
                             )
                           }
@@ -131,7 +135,7 @@ export default function HouseholdMembers({
               >
                 <ListItemText
                   primary={member.email}
-                  secondary={`Joined ${when(member.joined_at)}`}
+                  secondary={`Joined ${formatDay(member.joined_at)}`}
                 />
               </ListItem>
             );
@@ -201,10 +205,10 @@ export default function HouseholdMembers({
                         <span>
                           <IconButton
                             edge="end"
-                            aria-label={`Revoke invite created ${when(item.created_at)}`}
+                            aria-label={`Revoke invite created ${formatDay(item.created_at)}`}
                             disabled={busy}
                             onClick={() =>
-                              act(() =>
+                              submit(() =>
                                 fetch(`/api/invites/${item.id}`, { method: "DELETE" }),
                               )
                             }
@@ -216,13 +220,13 @@ export default function HouseholdMembers({
                     }
                   >
                     <ListItemText
-                      primary={`Invite from ${when(item.created_at)}`}
+                      primary={`Invite from ${formatDay(item.created_at)}`}
                       secondary={
                         state === "accepted"
                           ? "Used"
                           : state === "expired"
                             ? "Expired"
-                            : `Expires ${when(item.expires_at)}`
+                            : `Expires ${formatDay(item.expires_at)}`
                       }
                     />
                   </ListItem>

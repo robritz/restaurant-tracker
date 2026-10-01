@@ -5,7 +5,6 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import HouseholdMembers, { type Member } from "@/components/HouseholdMembers";
 import { NO_HOUSEHOLD_MESSAGE, requireHousehold } from "@/lib/auth/household";
-import { createSupabaseServerClient } from "@/lib/supabase/server";
 
 export const metadata: Metadata = {
   title: "Household · Restaurant Tracker",
@@ -25,7 +24,10 @@ export default async function HouseholdPage() {
     );
   }
 
-  const supabase = await createSupabaseServerClient();
+  // requireHousehold() hands back the RLS-enforced client along with the
+  // Household; building a second one here would be the mistake that helper
+  // exists to prevent.
+  const { supabase } = context;
 
   // Emails come from a definer function because auth.users is beyond any
   // policy here; it scopes itself to the caller's Household.

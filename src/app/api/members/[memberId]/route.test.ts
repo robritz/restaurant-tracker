@@ -18,13 +18,13 @@ function stubSupabase(result: { error?: unknown; count?: number } = {}) {
   return { from: vi.fn(() => ({ delete: del })), delete: del, eq };
 }
 
-function remove(userId: string) {
-  return DELETE(new Request(`http://localhost/api/members/${userId}`, { method: "DELETE" }), {
-    params: Promise.resolve({ userId }),
+function remove(memberId: string) {
+  return DELETE(new Request(`http://localhost/api/members/${memberId}`, { method: "DELETE" }), {
+    params: Promise.resolve({ memberId }),
   });
 }
 
-describe("DELETE /api/members/[userId]", () => {
+describe("DELETE /api/members/[memberId]", () => {
   it("removes the membership, which is what ends that phone's access", async () => {
     const supabase = stubSupabase();
     requireHousehold.mockResolvedValue({ supabase, householdId: "h1" });

@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import {
   createCredential,
   seedTwoHouseholds,
@@ -139,13 +139,17 @@ describe("Household invites (real database)", () => {
   });
 
   describe("redeeming", () => {
+    // A fresh credential per test, not one shared across the block: a
+    // credential that has already joined somewhere is refused outright (see
+    // the one-Household rule below), so reusing one would make every test
+    // after the first pass for the wrong reason.
     let joiner: Credential;
 
-    beforeAll(async () => {
+    beforeEach(async () => {
       joiner = await createCredential("joiner");
     });
 
-    afterAll(async () => {
+    afterEach(async () => {
       await joiner?.remove();
     });
 
@@ -241,6 +245,40 @@ describe("Household invites (real database)", () => {
         expect(mine).toEqual([fixture.b.id]);
       } finally {
         await outsider.remove();
+      }
+    });
+
+    it("refuses a credential that is already in a Household", async () => {
+      // requireHousehold() reads limit(1) and documents that one Household
+      // per credential is the assumption. The grant is to `authenticated` at
+      // large, so this is what stops a hand-made RPC putting a credential in
+      // a state the app cannot represent.
+      const { token } = await issue(fixture.b.id);
+
+      const { data } = await fixture.a.client.rpc("accept_household_invite", {
+        p_token_hash: hashInviteToken(token),
+      });
+
+      expect(data).toBeNull();
+      const { data: mine } = await fixture.a.client.rpc(
+        "household_ids_for_current_user",
+      );
+      expect(mine).toEqual([fixture.a.id]);
+    });
+
+    it("leaves such an invite unspent, so the person it was meant for can still use it", async () => {
+      const { token } = await issue(fixture.b.id);
+      const hash = hashInviteToken(token);
+      await fixture.a.client.rpc("accept_household_invite", { p_token_hash: hash });
+
+      const intended = await createCredential("intended");
+      try {
+        const { data } = await intended.client.rpc("accept_household_invite", {
+          p_token_hash: hash,
+        });
+        expect(data).toBe(fixture.b.id);
+      } finally {
+        await intended.remove();
       }
     });
 

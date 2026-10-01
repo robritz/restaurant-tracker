@@ -19,18 +19,22 @@ import { NO_HOUSEHOLD_MESSAGE, requireHousehold } from "@/lib/auth/household";
  */
 export async function DELETE(
   _request: Request,
-  { params }: { params: Promise<{ userId: string }> },
+  // A Member is identified by the credential it is a membership *of*, which
+  // is `household_members.user_id`. The segment is named for the domain
+  // concept rather than the column: CONTEXT.md keeps "User" off the
+  // vocabulary deliberately.
+  { params }: { params: Promise<{ memberId: string }> },
 ) {
   const context = await requireHousehold();
   if (!context) {
     return NextResponse.json({ error: NO_HOUSEHOLD_MESSAGE }, { status: 403 });
   }
 
-  const { userId } = await params;
+  const { memberId } = await params;
   const { error, count } = await context.supabase
     .from("household_members")
     .delete({ count: "exact" })
-    .eq("user_id", userId);
+    .eq("user_id", memberId);
 
   if (error) {
     return NextResponse.json(

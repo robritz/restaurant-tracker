@@ -98,6 +98,14 @@ grant execute on function public.household_for_invite(text) to anon, authenticat
 -- push somebody else into a Household. Granted to authenticated only -- there
 -- is no anonymous path through it at all.
 --
+-- A credential already in a Household is refused. The app assumes one
+-- Household per credential and says so in code -- requireHousehold() reads
+-- `limit(1)` and notes that a credential in two is the thing that would
+-- force it to start asking which. Nothing in the app can reach this, since
+-- redeeming an invite always mints a fresh credential, but the grant is to
+-- `authenticated` at large and an RPC made by hand should not be able to put
+-- a credential in a state the rest of the app cannot represent.
+--
 -- The update is the lock. `accepted_at is null` in its WHERE means two
 -- simultaneous redemptions of one token leave exactly one winner, and the
 -- loser gets no row back and so no membership: that is what makes "single
@@ -114,6 +122,10 @@ declare
   claimer uuid := (select auth.uid());
 begin
   if claimer is null then
+    return null;
+  end if;
+
+  if exists (select 1 from public.household_members where user_id = claimer) then
     return null;
   end if;
 

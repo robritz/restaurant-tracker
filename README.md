@@ -126,7 +126,7 @@ control.
 - `src/lib/supabase/cookies.ts` -- marks session cookies `HttpOnly`.
 - `src/lib/supabase/env.ts` -- reads the env vars above.
 
-Three `SECURITY DEFINER` functions sit alongside the policies, each scoped so
+Four `SECURITY DEFINER` functions sit alongside the policies, each scoped so
 it can only ever answer about the caller:
 
 - `household_ids_for_current_user()` -- which Households the caller is in.
@@ -137,7 +137,8 @@ it can only ever answer about the caller:
   else, so a bad token learns only that it is bad.
 - `accept_household_invite(token_hash)` -- claims an invite and joins
   `auth.uid()` to its Household, atomically. `authenticated` only: there is
-  no anonymous path into a Household.
+  no anonymous path into a Household, and a credential already in one is
+  refused, since the app assumes one Household per credential.
 - `household_members_for_current_user()` -- the caller's fellow members and
   their emails, which live in `auth.users` and no policy here can reach.
 
@@ -272,7 +273,7 @@ src/
 │   ├── api/invites/route.ts           # Server route: issue an invite into your Household
 │   ├── api/invites/[id]/route.ts      # Server route: revoke an invite
 │   ├── api/invites/accept/route.ts    # Server route: redeem one (public -- a joiner has no session)
-│   ├── api/members/[userId]/route.ts  # Server route: remove a phone's access
+│   ├── api/members/[memberId]/route.ts # Server route: remove a phone's access
 │   ├── layout.tsx                     # Root layout: document shell and MUI theme only
 │   ├── login/page.tsx                 # The sign-in screen (outside the app's chrome)
 │   ├── join/[token]/page.tsx          # Redeem an invite (also outside the chrome)

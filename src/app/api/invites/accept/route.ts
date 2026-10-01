@@ -2,15 +2,25 @@ import { NextResponse } from "next/server";
 import { createSupabaseServiceRoleClient } from "@/lib/supabase/client";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { hashInviteToken } from "@/lib/invites/token";
-
-/** Supabase's own floor is 6; this is the app's, stated where it is applied. */
-const MIN_PASSWORD_LENGTH = 8;
+import { MIN_PASSWORD_LENGTH, PASSWORD_TOO_SHORT } from "@/lib/auth/password";
 
 /**
  * The same answer for expired, already used, revoked and never-existed. Which
  * one it was is not the joiner's business and would make a token oracle.
  */
 const DEAD_INVITE = "That invite is no longer valid. Ask for a new one.";
+
+/**
+ * Supabase reports a duplicate address as `email_exists`; older versions only
+ * said so in the message, so both are checked.
+ */
+function takenEmail(error: { code?: string; message?: string } | null): boolean {
+  if (!error) return false;
+  return (
+    error.code === "email_exists" ||
+    /already (been )?registered|already exists/i.test(error.message ?? "")
+  );
+}
 
 function field(body: unknown, name: string): string | null {
   const value = (body as Record<string, unknown> | null)?.[name];
@@ -59,10 +69,7 @@ export async function POST(request: Request) {
   }
 
   if (password.length < MIN_PASSWORD_LENGTH) {
-    return NextResponse.json(
-      { error: `Choose a password of at least ${MIN_PASSWORD_LENGTH} characters.` },
-      { status: 400 },
-    );
+    return NextResponse.json({ error: PASSWORD_TOO_SHORT }, { status: 400 });
   }
 
   const tokenHash = hashInviteToken(token);
@@ -87,10 +94,19 @@ export async function POST(request: Request) {
   });
 
   if (createError || !created?.user) {
-    return NextResponse.json(
-      { error: "That email already has a sign-in. Use a different one." },
-      { status: 409 },
-    );
+    // A taken email is the one failure the joiner can act on, and the only
+    // one worth naming. Reporting an outage or a rejected password as "that
+    // email is taken" would send someone to invent a second address for a
+    // problem a different address will not fix.
+    return takenEmail(createError)
+      ? NextResponse.json(
+          { error: "That email already has a sign-in. Use a different one." },
+          { status: 409 },
+        )
+      : NextResponse.json(
+          { error: "Unable to set up that sign-in. Try again shortly." },
+          { status: 503 },
+        );
   }
 
   const { error: signInError } = await supabase.auth.signInWithPassword({
