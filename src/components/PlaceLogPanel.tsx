@@ -10,6 +10,13 @@ import type { PlaceLog } from "@/app/api/place-logs/[id]/route";
 import { skeletonCount } from "@/lib/place-logs";
 import DishGallery, { DishGallerySkeleton } from "./DishGallery";
 
+/** A fetch outcome, tagged with the Place it is an outcome *for*. */
+type PlaceLogResult = {
+  id: string;
+  placeLog: PlaceLog | null;
+  failed: boolean;
+};
+
 /**
  * What have we eaten here? The Place's name and address come from the pin
  * data already in hand, so they're on screen the instant a pin is tapped --
@@ -23,15 +30,17 @@ export default function PlaceLogPanel({
 }: {
   summary: PlaceLogSummary;
 }) {
-  const [placeLog, setPlaceLog] = useState<PlaceLog | null>(null);
-  const [failed, setFailed] = useState(false);
+  // The outcome carries the Place it belongs to, so the previous Place's
+  // dishes cannot sit under this Place's name: a result for any other id is
+  // simply not this Place's, and reads as still-loading. That is what makes
+  // the stale state unreachable, rather than an effect racing to clear it.
+  const [result, setResult] = useState<PlaceLogResult | null>(null);
+  const forThisPlace = result?.id === summary.id ? result : null;
+  const placeLog = forThisPlace?.placeLog ?? null;
+  const failed = forThisPlace?.failed ?? false;
 
   useEffect(() => {
     let active = true;
-    // Cleared, not left behind: the previous Place's dishes must never sit
-    // under this Place's name.
-    setPlaceLog(null);
-    setFailed(false);
     (async () => {
       try {
         // no-store: the payload's thumbnail URLs are signed for an hour,
@@ -41,9 +50,11 @@ export default function PlaceLogPanel({
         });
         if (!res.ok) throw new Error("Failed to load place log");
         const data = (await res.json()) as { placeLog: PlaceLog };
-        if (active) setPlaceLog(data.placeLog);
+        if (active)
+          setResult({ id: summary.id, placeLog: data.placeLog, failed: false });
       } catch {
-        if (active) setFailed(true);
+        if (active)
+          setResult({ id: summary.id, placeLog: null, failed: true });
       }
     })();
     return () => {
