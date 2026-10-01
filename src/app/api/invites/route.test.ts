@@ -18,8 +18,15 @@ function stubSupabase(result: { data?: unknown; error?: unknown } = {}) {
     error: result.error ?? null,
   });
   const select = vi.fn(() => ({ single }));
-  const insert = vi.fn((_row: Record<string, string>) => ({ select }));
-  return { from: vi.fn(() => ({ insert })), insert, select, single };
+  // The rows handed to insert, captured as they arrive: what most of these
+  // tests assert on is the row, so reading it off a typed array says so more
+  // plainly than digging through `insert.mock.calls`.
+  const inserted: Record<string, string>[] = [];
+  const insert = vi.fn((row: Record<string, string>) => {
+    inserted.push(row);
+    return { select };
+  });
+  return { from: vi.fn(() => ({ insert })), insert, inserted, select, single };
 }
 
 function post() {
@@ -46,7 +53,7 @@ describe("POST /api/invites", () => {
 
     const body = await (await post()).json();
     const token = body.path.replace("/join/", "");
-    const row = supabase.insert.mock.calls[0]![0];
+    const row = supabase.inserted[0]!;
 
     expect(row.token_hash).toBe(hashInviteToken(token));
     expect(JSON.stringify(row)).not.toContain(token);
@@ -58,7 +65,7 @@ describe("POST /api/invites", () => {
 
     await post();
 
-    expect(supabase.insert.mock.calls[0]![0].household_id).toBe(HOUSEHOLD_ID);
+    expect(supabase.inserted[0]!.household_id).toBe(HOUSEHOLD_ID);
   });
 
   it("expires the invite", async () => {
@@ -67,7 +74,7 @@ describe("POST /api/invites", () => {
 
     const before = Date.now();
     await post();
-    const expiresAt = Date.parse(supabase.insert.mock.calls[0]![0].expires_at);
+    const expiresAt = Date.parse(supabase.inserted[0]!.expires_at);
 
     expect(expiresAt).toBeGreaterThanOrEqual(before + INVITE_LIFETIME_MS);
     expect(expiresAt).toBeLessThanOrEqual(Date.now() + INVITE_LIFETIME_MS);

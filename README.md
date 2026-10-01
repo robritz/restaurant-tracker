@@ -332,6 +332,7 @@ src/
 │   │   ├── geolocation.ts             # What a failed locate-me says, and for how long
 │   │   ├── pins.ts                    # Camera framing and pin stacking
 │   │   └── selection.ts               # The selected Place's URL, and push vs replace
+│   ├── navigation.ts                  # hardNavigate(): the session-boundary document load
 │   ├── photos.ts                      # Thumbnail generation
 │   └── supabase/
 │       ├── client.ts                  # createSupabaseClient() / createSupabaseServiceRoleClient()

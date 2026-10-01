@@ -21,6 +21,7 @@ import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
 import LogoutIcon from "@mui/icons-material/Logout";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { inviteState } from "@/lib/invites/state";
+import { hardNavigate } from "@/lib/navigation";
 
 export type Member = {
   user_id: string;
@@ -149,10 +150,9 @@ export default function HouseholdMembers({
                                 fetch(`/api/members/${member.user_id}`, {
                                   method: "DELETE",
                                 }),
-                              // Leaving takes away the page you are on.
-                              isMe
-                                ? () => window.location.assign("/")
-                                : undefined,
+                              // Leaving takes away the page you are on, and
+                              // the map still holding this Household's pins.
+                              isMe ? () => hardNavigate("/") : undefined,
                             )
                           }
                         >

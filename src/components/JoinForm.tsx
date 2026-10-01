@@ -11,6 +11,7 @@ import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
+import { hardNavigate } from "@/lib/navigation";
 
 /**
  * Sets up the second phone's own sign-in against an invite.
@@ -43,9 +44,9 @@ export default function JoinForm({ token }: { token: string }) {
         return;
       }
 
-      // A full load, as after signing in: the session cookie is only just set
-      // and the app's layout has to mount with it.
-      window.location.assign("/");
+      // As after signing in: the session cookie is only just set and the
+      // app's layout has to mount with it.
+      hardNavigate("/");
     } catch {
       setError("Unable to reach the server. Check your connection.");
       setBusy(false);

@@ -10,6 +10,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { hardNavigate } from "@/lib/navigation";
 
 type Status = "idle" | "signing-in" | "error";
 
@@ -38,10 +39,9 @@ export default function LoginForm({ destination }: { destination: string }) {
         return;
       }
 
-      // A full document load, not a client-side push: the session cookie is
-      // only just set, and the app's layout has to mount with it. It also
-      // guarantees nothing from the signed-out page survives.
-      window.location.assign(destination);
+      // The session cookie is only just set and the app's layout has to mount
+      // with it; nothing from the signed-out page may survive.
+      hardNavigate(destination);
     } catch {
       setError("Unable to reach the server. Check your connection.");
       setStatus("error");
