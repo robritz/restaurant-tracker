@@ -96,9 +96,11 @@ async function ensureHousehold(userId) {
     .single();
   if (householdError || !household) fail("Unable to create the Household.", householdError);
 
+  // The seeded account is the Household's admin: the one that can invite a
+  // second phone and remove it again.
   const { error: joinError } = await supabase
     .from("household_members")
-    .insert({ household_id: household.id, user_id: userId });
+    .insert({ household_id: household.id, user_id: userId, role: "admin" });
   if (joinError) fail("Unable to add the identity to the Household.", joinError);
 
   console.log(`Created Household "${householdName}" and added ${email} to it.`);

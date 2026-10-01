@@ -88,20 +88,58 @@ export type Database = {
           },
         ]
       }
+      household_invites: {
+        Row: {
+          accepted_at: string | null
+          created_at: string
+          expires_at: string
+          household_id: string
+          id: string
+          token_hash: string
+        }
+        Insert: {
+          accepted_at?: string | null
+          created_at?: string
+          expires_at: string
+          household_id: string
+          id?: string
+          token_hash: string
+        }
+        Update: {
+          accepted_at?: string | null
+          created_at?: string
+          expires_at?: string
+          household_id?: string
+          id?: string
+          token_hash?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "household_invites_household_id_fkey"
+            columns: ["household_id"]
+            isOneToOne: false
+            referencedRelation: "households"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       household_members: {
         Row: {
           created_at: string
           household_id: string
+          role: string
           user_id: string
         }
         Insert: {
           created_at?: string
           household_id: string
+          role?: string
           user_id: string
         }
         Update: {
           created_at?: string
           household_id?: string
+          role?: string
           user_id?: string
         }
         Relationships: [
@@ -164,7 +202,30 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      accept_household_invite: {
+        Args: { p_token_hash: string }
+        Returns: string
+      }
+      admin_household_ids_for_current_user: { Args: never; Returns: string[] }
+      current_household_membership: {
+        Args: never
+        Returns: {
+          household_id: string
+          role: string
+          user_id: string
+        }[]
+      }
+      household_for_invite: { Args: { p_token_hash: string }; Returns: string }
       household_ids_for_current_user: { Args: never; Returns: string[] }
+      household_members_for_current_user: {
+        Args: never
+        Returns: {
+          email: string
+          joined_at: string
+          role: string
+          user_id: string
+        }[]
+      }
     }
     Enums: {
       [_ in never]: never

@@ -4,16 +4,11 @@ import { useState } from "react";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import LogoutIcon from "@mui/icons-material/Logout";
+import { hardNavigate } from "@/lib/navigation";
 
 /**
- * Signing out is a *hard* navigation, not a router push.
- *
- * The map is deliberately kept alive across tab navigation, holding a live
- * Mapbox instance and the PlaceLogs it has already fetched. A client-side
- * navigation would leave all of that mounted, so the previous session's pins
- * would still be on screen behind the login. A full document load destroys it
- * by construction -- and keeps doing so for whatever state gets cached next,
- * without anyone having to remember to reset it.
+ * Signing out is a hard navigation, not a router push -- see
+ * `hardNavigate()` for why every session boundary is.
  */
 export default function SignOutButton() {
   const [busy, setBusy] = useState(false);
@@ -26,10 +21,7 @@ export default function SignOutButton() {
       // Even if clearing the session server-side failed, leaving the page is
       // the more important half of signing out.
     }
-    // The rule's advice -- router.push() -- is the client-side navigation the
-    // comment above exists to rule out.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.assign("/login");
+    hardNavigate("/login");
   }
 
   return (

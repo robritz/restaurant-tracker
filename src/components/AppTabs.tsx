@@ -7,6 +7,9 @@ import Tabs from "@mui/material/Tabs";
 import AddAPhotoIcon from "@mui/icons-material/AddAPhoto";
 import MapIcon from "@mui/icons-material/Map";
 import Box from "@mui/material/Box";
+import IconButton from "@mui/material/IconButton";
+import Tooltip from "@mui/material/Tooltip";
+import GroupIcon from "@mui/icons-material/Group";
 import SignOutButton from "./SignOutButton";
 
 const TABS = [
@@ -19,9 +22,9 @@ const TABS = [
  * a tab is linkable and the browser back gesture behaves. Capture stays the
  * landing tab -- logging a dish is the thing done most often.
  *
- * Sign-out sits beside the tabs rather than being one: it is not a place in
- * the app, and there is nothing else to put on an account screen while a
- * single Household exists.
+ * Sign-out and the household screen sit beside the tabs rather than being
+ * ones. Both are places you go occasionally -- to invite a phone or to remove
+ * one -- while the tabs are the two things done every time.
  */
 export default function AppTabs() {
   const pathname = usePathname();
@@ -51,6 +54,16 @@ export default function AppTabs() {
           />
         ))}
       </Tabs>
+      <Tooltip title="Household">
+        <IconButton
+          component={Link}
+          href="/household"
+          aria-label="Household"
+          sx={{ flexShrink: 0 }}
+        >
+          <GroupIcon />
+        </IconButton>
+      </Tooltip>
       <SignOutButton />
     </Box>
   );

@@ -164,9 +164,12 @@ export async function seedTwoHouseholds(): Promise<Fixture> {
     }
     created.households.push(household.id);
 
+    // Admin, like the account `npm run seed` creates. A fixture whose
+    // Households had no admin could not exercise the rules that matter, and
+    // would quietly disagree with every real database.
     const { error: memberError } = await admin
       .from("household_members")
-      .insert({ household_id: household.id, user_id: user.user.id });
+      .insert({ household_id: household.id, user_id: user.user.id, role: "admin" });
     if (memberError) throw new Error(`seed membership ${label}: ${memberError.message}`);
 
     const entryIds: Record<string, string> = {};
@@ -289,5 +292,52 @@ export async function seedTwoHouseholds(): Promise<Fixture> {
       return new Date(value).getTime();
     },
     cleanup,
+  };
+}
+
+/**
+ * A signed-in credential belonging to no Household -- what someone holding an
+ * invite link is, right up until they redeem it.
+ *
+ * Separate from `seedTwoHouseholds`, which only ever makes a credential as
+ * part of making a Household. The invite tests need the other half: an
+ * identity with a real session and no membership at all.
+ */
+export type Credential = {
+  userId: string;
+  email: string;
+  client: SupabaseDataClient;
+  /** Deletes the identity. Call it even when the test failed. */
+  remove: () => Promise<void>;
+};
+
+export async function createCredential(label: string): Promise<Credential> {
+  const admin = serviceRoleClient();
+  const unique = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+  const email = `${label}.${unique}@households.test`;
+  const password = `pw-${unique}`;
+
+  const { data, error } = await admin.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+  });
+  if (error || !data.user) throw new Error(`credential ${label}: ${error?.message}`);
+
+  const client = createSupabaseClient();
+  const { error: signInError } = await client.auth.signInWithPassword({ email, password });
+  if (signInError) {
+    await admin.auth.admin.deleteUser(data.user.id);
+    throw new Error(`sign in ${label}: ${signInError.message}`);
+  }
+
+  return {
+    userId: data.user.id,
+    email,
+    client,
+    remove: async () => {
+      await admin.from("household_members").delete().eq("user_id", data.user!.id);
+      await admin.auth.admin.deleteUser(data.user!.id);
+    },
   };
 }

@@ -5,8 +5,20 @@ Tracks photos of dishes a family has eaten, tied to the restaurant and location 
 ## Language
 
 **Household**:
-The family whose Entries these are — the owner of everything tracked here, and the thing you log in as. A Household is not a person: one Household covers everyone who eats together, however many of them there are, and they share a single map. There is currently no concept of an individual person inside a Household, so no Entry records *which* family member ate the dish.
+The family whose Entries these are — the owner of everything tracked here, and the thing you log in *to*. A Household is not a person: one Household covers everyone who eats together, however many of them there are, and they share a single map. Several credentials can reach one Household, each joining as a Member. There is still no concept of an individual person *inside* a Household, so no Entry records which family member ate the dish.
 _Avoid_: Account (blurs the credential with the owner), User (implies one person)
+
+**Member**:
+One credential's membership of a Household — the thing that grants access, and the thing revoking access removes. A Member is a way *in*, not a person the app knows anything about: nothing is attributed to one, and removing one takes nothing away with it. Created either by the seed or by redeeming an Invite; never by signing up. Every Member is either the Household's Admin or a plain Member.
+_Avoid_: User, Account (both imply an owner of data, when a Household owns everything)
+
+**Admin**:
+The one Member who runs a Household — the account it was seeded with. The Admin issues and revokes Invites and removes any other Member; a plain Member does none of those and can only remove themselves. The Admin cannot remove themselves, so a Household always has one. Admin is a role on a membership, not a different kind of credential, and it confers nothing over Entries: an Admin's dishes are the Household's like anyone else's.
+_Avoid_: Owner (nobody owns a Household; it owns), Superuser
+
+**Invite**:
+A single-use, expiring link that lets one more credential become a Member of the Household that issued it. The token lives only in the link — only its hash is stored — so an Invite is shown once and cannot be recovered, only reissued. Always scoped to one Household: redeeming it can never land someone in another.
+_Avoid_: Signup, Registration (both imply self-service, which is exactly what this is not)
 
 **Entry**:
 A single saved record: one photo of a dish, its title, the Place it was eaten at, and when it was captured. The atomic unit of tracking — there is no larger "visit" or "occasion" grouping multiple Entries together; a meal with three photographed dishes is three Entries that happen to share a Place. An Entry is never a pin of its own — pins belong to Places. Every Entry belongs to exactly one Household, and is visible only to it.

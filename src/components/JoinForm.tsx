@@ -10,55 +10,61 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
+import { MIN_PASSWORD_LENGTH } from "@/lib/auth/password";
 import { hardNavigate } from "@/lib/navigation";
 
-type Status = "idle" | "signing-in" | "error";
-
-export default function LoginForm({ destination }: { destination: string }) {
+/**
+ * Sets up the second phone's own sign-in against an invite.
+ *
+ * An email and a password, not a shared one: the point of the whole feature
+ * is that nobody hands over the password they already use.
+ */
+export default function JoinForm({ token }: { token: string }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [status, setStatus] = useState<Status>("idle");
+  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit(event: FormEvent) {
     event.preventDefault();
-    setStatus("signing-in");
+    setBusy(true);
     setError(null);
 
     try {
-      const response = await fetch("/api/auth/login", {
+      const response = await fetch("/api/invites/accept", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ token, email, password }),
       });
 
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        setError(body?.error ?? "Unable to sign in right now.");
-        setStatus("error");
+        setError(body?.error ?? "Unable to join right now.");
+        setBusy(false);
         return;
       }
 
-      // The session cookie is only just set and the app's layout has to mount
-      // with it; nothing from the signed-out page may survive.
-      hardNavigate(destination);
+      // As after signing in: the session cookie is only just set and the
+      // app's layout has to mount with it.
+      hardNavigate("/");
     } catch {
       setError("Unable to reach the server. Check your connection.");
-      setStatus("error");
+      setBusy(false);
     }
   }
 
-  const busy = status === "signing-in";
+  const tooShort = password.length > 0 && password.length < MIN_PASSWORD_LENGTH;
 
   return (
     <Container maxWidth="sm" sx={{ py: 8 }}>
       <Stack spacing={4} alignItems="center">
         <Stack spacing={1} alignItems="center">
           <Typography variant="h4" component="h1" fontWeight={600}>
-            Restaurant Tracker
+            Join the household
           </Typography>
           <Typography variant="body1" color="text.secondary" textAlign="center">
-            Sign in to see where your family has eaten.
+            Pick your own sign-in. You&rsquo;ll see the same map as the person
+            who invited you.
           </Typography>
         </Stack>
 
@@ -82,19 +88,21 @@ export default function LoginForm({ destination }: { destination: string }) {
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
-                autoComplete="current-password"
+                autoComplete="new-password"
                 required
                 fullWidth
                 disabled={busy}
+                error={tooShort}
+                helperText={`At least ${MIN_PASSWORD_LENGTH} characters.`}
               />
               <Button
                 type="submit"
                 variant="contained"
                 size="large"
-                disabled={busy || !email.trim() || !password}
+                disabled={busy || !email.trim() || password.length < MIN_PASSWORD_LENGTH}
                 startIcon={busy ? <CircularProgress size={18} /> : undefined}
               >
-                {busy ? "Signing in…" : "Sign in"}
+                {busy ? "Joining…" : "Join"}
               </Button>
             </Stack>
           </Box>
