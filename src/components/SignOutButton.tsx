@@ -26,6 +26,10 @@ export default function SignOutButton() {
       // Even if clearing the session server-side failed, leaving the page is
       // the more important half of signing out.
     }
+    // The rule's advice -- router.push() -- is exactly what this must not do:
+    // a client-side navigation is what would leave the signed-out session's
+    // map mounted. Disabled here, deliberately, for the reason above.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
     window.location.assign("/login");
   }
 

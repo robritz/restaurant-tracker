@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useEffect, useState } from "react";
+import { Suspense, useState } from "react";
 import { usePathname } from "next/navigation";
 import Box from "@mui/material/Box";
 import MapView from "./MapView";
@@ -27,9 +27,12 @@ export default function PersistentMap({
   const onMap = pathname === MAP_PATH;
   const [everOpened, setEverOpened] = useState(false);
 
-  useEffect(() => {
-    if (onMap) setEverOpened(true);
-  }, [onMap]);
+  // Latched during render rather than in an effect: the map has to mount on
+  // the same render that first puts us on the map path, not a commit later.
+  // React re-runs this component immediately and discards the thrown-away
+  // output, so no extra paint happens -- and it only fires once, because the
+  // condition is false forever after.
+  if (onMap && !everOpened) setEverOpened(true);
 
   return (
     <>

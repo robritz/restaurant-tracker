@@ -23,15 +23,21 @@ export default function PlaceLogPanel({
 }: {
   summary: PlaceLogSummary;
 }) {
-  const [placeLog, setPlaceLog] = useState<PlaceLog | null>(null);
-  const [failed, setFailed] = useState(false);
+  // The outcome carries the Place it belongs to, so the previous Place's
+  // dishes cannot sit under this Place's name: a result for any other id is
+  // simply not this Place's, and reads as still-loading. That is what makes
+  // the stale state unreachable, rather than an effect racing to clear it.
+  const [result, setResult] = useState<{
+    id: string;
+    placeLog: PlaceLog | null;
+    failed: boolean;
+  } | null>(null);
+  const current = result?.id === summary.id ? result : null;
+  const placeLog = current?.placeLog ?? null;
+  const failed = current?.failed ?? false;
 
   useEffect(() => {
     let active = true;
-    // Cleared, not left behind: the previous Place's dishes must never sit
-    // under this Place's name.
-    setPlaceLog(null);
-    setFailed(false);
     (async () => {
       try {
         // no-store: the payload's thumbnail URLs are signed for an hour,
@@ -41,9 +47,11 @@ export default function PlaceLogPanel({
         });
         if (!res.ok) throw new Error("Failed to load place log");
         const data = (await res.json()) as { placeLog: PlaceLog };
-        if (active) setPlaceLog(data.placeLog);
+        if (active)
+          setResult({ id: summary.id, placeLog: data.placeLog, failed: false });
       } catch {
-        if (active) setFailed(true);
+        if (active)
+          setResult({ id: summary.id, placeLog: null, failed: true });
       }
     })();
     return () => {

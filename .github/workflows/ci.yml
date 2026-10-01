@@ -40,10 +40,14 @@ jobs:
 
       # Every step below runs the same npm script a developer would, rather
       # than reaching for the underlying binary, so there is one definition of
-      # how this project is typechecked, started and tested.
+      # how this project is linted, typechecked, started and tested.
 
-      # Cheapest first, and neither needs Docker: a type error or a broken
-      # unit test should not wait on a database starting.
+      # Cheapest first, and none of these need Docker: a lint violation, a
+      # type error or a broken unit test should not wait on a database
+      # starting.
+      - name: Lint
+        run: npm run lint
+
       - name: Typecheck
         run: npm run typecheck
 
