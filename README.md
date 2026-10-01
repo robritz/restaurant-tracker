@@ -271,7 +271,7 @@ would keep serving its last deployment and quietly stop receiving new ones.
 | `npm run dev`             | Start the development server            |
 | `npm run build`           | Production build                        |
 | `npm run start`           | Serve the production build              |
-| `npm run lint`            | Run ESLint (currently broken -- see #48) |
+| `npm run lint`            | Run ESLint                              |
 | `npm run typecheck`       | Type-check without emitting             |
 | `npm test`                | Run the unit test suite (no Docker needed) |
 | `npm run test:integration` | Run the integration suite (needs local Supabase) |
@@ -402,9 +402,9 @@ The workflow deliberately fails rather than passing on an empty run --
 integration tests is a red build, not a green one with nothing behind it.
 
 It runs the same npm scripts a developer would, so there is one definition of
-how this project is typechecked, started and tested. Linting is **not** in CI
-yet: `npm run lint` does not currently run at all (#48), and wiring a broken
-command in would only teach everyone to ignore a red step.
+how this project is linted, typechecked, started and tested. Lint is in CI
+alongside typecheck, and was wired in only once it ran clean -- a step that is
+red from its first run is a step everyone learns to ignore.
 
 ## Known limitations (it's a POC)
 

@@ -1,4 +1,5 @@
 ## Agent skills
+Be less verbose.
 
 ### Issue tracker
 
