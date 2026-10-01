@@ -66,11 +66,24 @@ That login belongs to a **Household**, which is the family rather than a person 
 
 ### A second phone
 
-A second person joins by **invitation from someone already in the Household**, not by registering ([ADR 0006](docs/adr/0006-invites-create-credentials.md)). On the Household screen a member creates an invite link and sends it however they like; whoever opens it chooses their own email and password, and lands on the same map. No password is ever shared.
+A second person joins by **invitation from the Household's admin**, not by registering ([ADR 0006](docs/adr/0006-invites-create-credentials.md)). On the Household screen the admin creates an invite link and sends it however they like; whoever opens it chooses their own email and password, and lands on the same map. No password is ever shared.
 
-An invite works **once** and **expires after seven days**, and only its SHA-256 hash is stored — the token lives in the link and nowhere else, so it is shown exactly once and a lost link means issuing another. A token can only ever join the Household that issued it.
+An invite works **once** and **expires after seven days**, and only its SHA-256 hash is stored — the token lives in the link and nowhere else, so it is shown exactly once and a lost link means issuing another. A token can only ever join the Household that issued it, and always joins as a plain member.
 
-Removing a phone is deleting its membership, and takes effect on its next query: every policy reads membership live, so there is no cached grant to wait out. You cannot remove yourself — signing out is how you leave, and the rule means a Household can never be emptied of members and stranded with Entries nobody can reach.
+#### Who may do what
+
+The account `npm run seed` creates is the Household's **admin**. Everyone who joins afterwards is a plain member.
+
+| | Admin | Member |
+| --- | --- | --- |
+| See the map, log a dish | yes | yes |
+| Issue and revoke invites | yes | no |
+| Remove another phone | yes | no |
+| Remove themselves | **no** | yes |
+
+The admin cannot remove themselves, so a Household always keeps the account that runs it and can never be stranded with Entries nobody can reach; signing out is how that phone steps away. A plain member can leave whenever they like, and cannot remove the account that invited them.
+
+Removing a phone is deleting its membership, and takes effect on its next query: every policy reads membership live, so there is no cached grant to wait out.
 
 Self-signup stays off throughout. `/join/<token>` and the route behind it are the only things reachable without a session, because a joiner by definition has none; issuing and revoking stay behind the login.
 
@@ -130,27 +143,38 @@ Four `SECURITY DEFINER` functions sit alongside the policies, each scoped so
 it can only ever answer about the caller:
 
 - `household_ids_for_current_user()` -- which Households the caller is in.
-  Every policy above is written against it.
+  Most policies above are written against it.
+- `admin_household_ids_for_current_user()` -- which the caller *runs*. The
+  invite policies and half of the membership-delete rule use this instead.
+- `current_household_membership()` -- the caller's own membership row, which
+  `requireHousehold()` reads. Needed because the select policy on
+  `household_members` is household-wide: a caller sees every member, so
+  reading a role off that table without filtering would hand back an
+  arbitrary member's.
 - `household_for_invite(token_hash)` -- the Household a live invite belongs
   to, or null. The one function granted to `anon`, because whoever is
   redeeming an invite has no session yet; it returns an opaque id and nothing
   else, so a bad token learns only that it is bad.
 - `accept_household_invite(token_hash)` -- claims an invite and joins
-  `auth.uid()` to its Household, atomically. `authenticated` only: there is
-  no anonymous path into a Household, and a credential already in one is
-  refused, since the app assumes one Household per credential.
-- `household_members_for_current_user()` -- the caller's fellow members and
-  their emails, which live in `auth.users` and no policy here can reach.
+  `auth.uid()` to its Household as a plain member, atomically.
+  `authenticated` only: there is no anonymous path into a Household, and a
+  credential already in one is refused, since the app assumes one Household
+  per credential.
+- `household_members_for_current_user()` -- the caller's fellow members, with
+  their emails and roles. Emails live in `auth.users`, which no policy here
+  can reach.
 
 Every table has policies, and they -- not the routes -- are what keep one
 Household's dishes away from another's:
 
 - `households` and `household_members` are readable only by their own members.
-  A member may delete *another* member of their own Household -- that is how
-  access is revoked -- but never themselves.
-- `household_invites` are readable, issuable and revocable only by members of
-  the Household they belong to, so an invite cannot be aimed at anyone else's
-  map. There is no update policy: `accepted_at` is set only by
+  Deleting a membership -- which is how access is revoked -- is governed by
+  two policies, OR'd: the admin may delete any member but themselves, and
+  anyone else may delete only themselves. Between them an admin cannot leave
+  and a member cannot be removed by a peer.
+- `household_invites` are readable, issuable and revocable only by the **admin**
+  of the Household they belong to, so an invite cannot be aimed at anyone
+  else's map. There is no update policy: `accepted_at` is set only by
   `accept_household_invite()`, which is what makes "single use" something
   that cannot be undone by rewriting the row.
 - `entries` are readable and insertable only by the Household that owns them.
@@ -255,7 +279,7 @@ would keep serving its last deployment and quietly stop receiving new ones.
 | `npm run supabase:stop`   | Stop local Supabase                     |
 | `npm run supabase:status` | Print local Supabase URL/keys           |
 | `npm run supabase:reset`  | Reapply migrations locally, then re-seed |
-| `npm run seed`            | Create the Household and its login      |
+| `npm run seed`            | Create the Household and its admin login |
 | `npm run gen:types`       | Regenerate Supabase TypeScript types    |
 
 ## Project structure
@@ -280,14 +304,14 @@ src/
 │   └── (app)/                         # Everything behind the login
 │       ├── layout.tsx                 # Tab bar + the persistent map
 │       ├── map/page.tsx               # Map tab route (the map itself lives in the layout)
-│       ├── household/page.tsx         # Who is in the Household; invite and remove
+│       ├── household/page.tsx         # Who is in the Household; invite, remove, leave
 │       └── page.tsx                   # Add: photo select -> pick a place -> title -> save
 ├── middleware.ts                      # The gate: redirect vs 401, and session refresh
 ├── components/
 │   ├── AppTabs.tsx                    # Add / Map tabs, household, and sign out
 │   ├── LoginForm.tsx                  # Email + password, posted to /api/auth/login
 │   ├── JoinForm.tsx                   # Choose a sign-in against an invite
-│   ├── HouseholdMembers.tsx           # Members, invite links, and revocation
+│   ├── HouseholdMembers.tsx           # Members and roles, invite links, revocation
 │   ├── SignOutButton.tsx              # Ends the session with a hard navigation
 │   ├── CaptureForm.tsx                # The Add tab's flow
 │   ├── PersistentMap.tsx              # Keeps the map alive across tab navigation
@@ -298,7 +322,8 @@ src/
 │   └── DishGallery.tsx                # The dishes photographed at one Place
 ├── lib/
 │   ├── auth/
-│   │   ├── household.ts               # requireHousehold(): the caller's Household + an RLS client
+│   │   ├── household.ts               # requireHousehold(): the caller's Household, role + an RLS client
+│   │   ├── admin.ts                   # The one "that's the admin's" message
 │   │   └── redirect.ts                # Where to land after signing in, minus open redirects
 │   ├── invites/
 │   │   ├── token.ts                   # Minting, hashing and expiring an invite token
@@ -320,7 +345,8 @@ src/
 test/
 ├── households.ts              # Two-Household fixture for the integration suite
 ├── policies.integration.test.ts  # What a signed-in member can and cannot do
-├── invites.integration.test.ts   # Invites, joining, and revocation against real policies
+├── invites.integration.test.ts   # Invites, joining, roles and revocation against real policies
+├── two-members.integration.test.ts # Both phones through the real routes
 └── setup-env.ts               # Loads .env.local for the integration suite
 
 scripts/
@@ -328,7 +354,7 @@ scripts/
 
 supabase/
 ├── config.toml                # Supabase CLI project config
-└── migrations/                # places, entries, households, household_members, household_invites
+└── migrations/                # places, entries, households, household_members, household_invites, roles
 ```
 
 ## Testing

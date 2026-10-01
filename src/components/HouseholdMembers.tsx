@@ -18,10 +18,16 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
 import PersonRemoveIcon from "@mui/icons-material/PersonRemove";
+import LogoutIcon from "@mui/icons-material/Logout";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { inviteState } from "@/lib/invites/state";
 
-export type Member = { user_id: string; email: string; joined_at: string };
+export type Member = {
+  user_id: string;
+  email: string;
+  joined_at: string;
+  role: string;
+};
 export type Invite = {
   id: string;
   created_at: string;
@@ -36,14 +42,23 @@ function formatDay(value: string): string {
   });
 }
 
+/**
+ * Who is in the Household, and what the viewer may do about it.
+ *
+ * The admin invites and removes anyone but themselves; everyone else can only
+ * leave. The policies enforce exactly that, so this decides what to *offer* --
+ * a button nobody can use is worse than no button.
+ */
 export default function HouseholdMembers({
   members,
   invites,
   currentUserId,
+  isAdmin,
 }: {
   members: Member[];
   invites: Invite[];
   currentUserId: string | null;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -106,136 +121,166 @@ export default function HouseholdMembers({
         <List dense disablePadding>
           {members.map((member) => {
             const isMe = member.user_id === currentUserId;
+            const admin = member.role === "admin";
+            // The admin removes others; anyone else removes only themselves.
+            // An admin is never offered a way to remove themselves.
+            const removable = isMe ? !admin : isAdmin;
             return (
               <ListItem
                 key={member.user_id}
                 disableGutters
                 secondaryAction={
-                  isMe ? (
-                    <Chip label="You" size="small" />
-                  ) : (
-                    <Tooltip title="Remove access">
+                  removable ? (
+                    <Tooltip
+                      title={isMe ? "Leave this household" : "Remove access"}
+                    >
                       <span>
                         <IconButton
                           edge="end"
-                          aria-label={`Remove ${member.email}`}
+                          aria-label={
+                            isMe
+                              ? "Leave this household"
+                              : `Remove ${member.email}`
+                          }
                           disabled={busy}
                           onClick={() =>
-                            submit(() =>
-                              fetch(`/api/members/${member.user_id}`, { method: "DELETE" }),
+                            submit(
+                              () =>
+                                fetch(`/api/members/${member.user_id}`, {
+                                  method: "DELETE",
+                                }),
+                              // Leaving takes away the page you are on.
+                              isMe
+                                ? () => window.location.assign("/")
+                                : undefined,
                             )
                           }
                         >
-                          <PersonRemoveIcon />
+                          {isMe ? <LogoutIcon /> : <PersonRemoveIcon />}
                         </IconButton>
                       </span>
                     </Tooltip>
-                  )
+                  ) : undefined
                 }
               >
                 <ListItemText
                   primary={member.email}
                   secondary={`Joined ${formatDay(member.joined_at)}`}
                 />
+                <Stack direction="row" spacing={0.5} sx={{ mr: 1 }}>
+                  {admin && <Chip label="Admin" size="small" color="primary" />}
+                  {isMe && <Chip label="You" size="small" />}
+                </Stack>
               </ListItem>
             );
           })}
         </List>
-        {/* Removing yourself is not offered: signing out is how you leave,
-            and it keeps a household from being emptied of members. */}
         <Typography variant="caption" color="text.secondary">
-          Removing a phone ends its access straight away.
+          {isAdmin
+            ? "Removing a phone ends its access straight away. You run this household, so you can't remove yourself."
+            : "Only the admin can invite or remove another phone. You can leave whenever you like."}
         </Typography>
       </Paper>
 
-      <Paper sx={{ p: 2 }}>
-        <Stack spacing={2}>
-          <Box>
-            <Typography variant="subtitle1" fontWeight={600}>
-              Invite another phone
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              Send the link however you like. It works once, and expires.
-            </Typography>
-          </Box>
+      {/* Inviting is the admin's, so a member is not shown a control the
+          policies would refuse. */}
+      {isAdmin && (
+        <Paper sx={{ p: 2 }}>
+          <Stack spacing={2}>
+            <Box>
+              <Typography variant="subtitle1" fontWeight={600}>
+                Invite another phone
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                Send the link however you like. It works once, and expires.
+              </Typography>
+            </Box>
 
-          <Button
-            variant="contained"
-            onClick={invite}
-            disabled={busy}
-            startIcon={busy ? <CircularProgress size={18} /> : undefined}
-          >
-            Create an invite link
-          </Button>
+            <Button
+              variant="contained"
+              onClick={invite}
+              disabled={busy}
+              startIcon={busy ? <CircularProgress size={18} /> : undefined}
+            >
+              Create an invite link
+            </Button>
 
-          {link && (
-            <Alert severity="success" icon={false}>
-              <Stack spacing={1}>
-                <Typography variant="body2">
-                  Copy this now — it is shown only once.
-                </Typography>
-                <Stack direction="row" spacing={1} alignItems="center">
-                  <TextField
-                    value={link}
-                    size="small"
-                    fullWidth
-                    slotProps={{ htmlInput: { readOnly: true, "aria-label": "Invite link" } }}
-                    onFocus={(event) => event.target.select()}
-                  />
-                  <Tooltip title={copied ? "Copied" : "Copy link"}>
-                    <IconButton onClick={copy} aria-label="Copy invite link">
-                      <ContentCopyIcon />
-                    </IconButton>
-                  </Tooltip>
-                </Stack>
-              </Stack>
-            </Alert>
-          )}
-
-          {invites.length > 0 && (
-            <List dense disablePadding>
-              {invites.map((item) => {
-                const state = inviteState(item);
-                return (
-                  <ListItem
-                    key={item.id}
-                    disableGutters
-                    secondaryAction={
-                      <Tooltip title="Revoke">
-                        <span>
-                          <IconButton
-                            edge="end"
-                            aria-label={`Revoke invite created ${formatDay(item.created_at)}`}
-                            disabled={busy}
-                            onClick={() =>
-                              submit(() =>
-                                fetch(`/api/invites/${item.id}`, { method: "DELETE" }),
-                              )
-                            }
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </span>
-                      </Tooltip>
-                    }
-                  >
-                    <ListItemText
-                      primary={`Invite from ${formatDay(item.created_at)}`}
-                      secondary={
-                        state === "accepted"
-                          ? "Used"
-                          : state === "expired"
-                            ? "Expired"
-                            : `Expires ${formatDay(item.expires_at)}`
-                      }
+            {link && (
+              <Alert severity="success" icon={false}>
+                <Stack spacing={1}>
+                  <Typography variant="body2">
+                    Copy this now — it is shown only once.
+                  </Typography>
+                  <Stack direction="row" spacing={1} alignItems="center">
+                    <TextField
+                      value={link}
+                      size="small"
+                      fullWidth
+                      slotProps={{
+                        htmlInput: {
+                          readOnly: true,
+                          "aria-label": "Invite link",
+                        },
+                      }}
+                      onFocus={(event) => event.target.select()}
                     />
-                  </ListItem>
-                );
-              })}
-            </List>
-          )}
-        </Stack>
-      </Paper>
+                    <Tooltip title={copied ? "Copied" : "Copy link"}>
+                      <IconButton onClick={copy} aria-label="Copy invite link">
+                        <ContentCopyIcon />
+                      </IconButton>
+                    </Tooltip>
+                  </Stack>
+                </Stack>
+              </Alert>
+            )}
+
+            {invites.length > 0 && (
+              <List dense disablePadding>
+                {invites.map((item) => {
+                  const state = inviteState(item);
+                  return (
+                    <ListItem
+                      key={item.id}
+                      disableGutters
+                      secondaryAction={
+                        <Tooltip title="Revoke">
+                          <span>
+                            <IconButton
+                              edge="end"
+                              aria-label={`Revoke invite created ${formatDay(item.created_at)}`}
+                              disabled={busy}
+                              onClick={() =>
+                                submit(() =>
+                                  fetch(`/api/invites/${item.id}`, {
+                                    method: "DELETE",
+                                  }),
+                                )
+                              }
+                            >
+                              <DeleteIcon />
+                            </IconButton>
+                          </span>
+                        </Tooltip>
+                      }
+                    >
+                      <ListItemText
+                        primary={`Invite from ${formatDay(item.created_at)}`}
+                        secondary={
+                          state === "accepted"
+                            ? "Used"
+                            : state === "expired"
+                              ? "Expired"
+                              : `Expires ${formatDay(item.expires_at)}`
+                        }
+                      />
+                    </ListItem>
+                  );
+                })}
+              </List>
+            )}
+          </Stack>
+        </Paper>
+      )}
     </Stack>
   );
 }

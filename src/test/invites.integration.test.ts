@@ -390,6 +390,145 @@ describe("Household invites (real database)", () => {
     });
   });
 
+  describe("the admin and everybody else", () => {
+    let member: Credential;
+
+    /** A second phone in Household A, joined the way a real one does. */
+    async function joinA(label: string): Promise<Credential> {
+      const credential = await createCredential(label);
+      const { token } = await issue(fixture.a.id);
+      const { data } = await credential.client.rpc("accept_household_invite", {
+        p_token_hash: hashInviteToken(token),
+      });
+      expect(data).toBe(fixture.a.id);
+      return credential;
+    }
+
+    beforeEach(async () => {
+      member = await joinA("plain-member");
+    });
+
+    afterEach(async () => {
+      await member?.remove();
+    });
+
+    it("joins an invited phone as a plain member, never as an admin", async () => {
+      const { data } = await member.client.rpc("current_household_membership");
+
+      expect(data?.[0]?.role).toBe("member");
+      expect(data?.[0]?.user_id).toBe(member.userId);
+    });
+
+    it("tells each caller their own role, not whichever row comes first", async () => {
+      // A plain read of household_members shows every member of the
+      // Household, so `limit(1)` over it would hand back an arbitrary
+      // member's role. This is the bug that function exists to prevent.
+      const visible = await member.client.from("household_members").select("user_id");
+      expect(visible.data?.length).toBe(2);
+
+      const asMember = await member.client.rpc("current_household_membership");
+      const asAdmin = await fixture.a.client.rpc("current_household_membership");
+
+      expect(asMember.data?.[0]?.role).toBe("member");
+      expect(asAdmin.data?.[0]?.role).toBe("admin");
+    });
+
+    it("refuses a plain member an invite", async () => {
+      const { error } = await member.client.from("household_invites").insert({
+        household_id: fixture.a.id,
+        token_hash: hashInviteToken(newInviteToken()),
+        expires_at: new Date(Date.now() + 60_000).toISOString(),
+      });
+
+      expect(error).not.toBeNull();
+      expect(error?.message).toMatch(/row-level security/i);
+    });
+
+    it("shows a plain member no invites to revoke", async () => {
+      await issue(fixture.a.id);
+
+      const { data } = await member.client.from("household_invites").select("id");
+
+      expect(data).toEqual([]);
+    });
+
+    it("refuses a plain member the revoking of one", async () => {
+      const { id } = await issue(fixture.a.id);
+
+      const { count } = await member.client
+        .from("household_invites")
+        .delete({ count: "exact" })
+        .eq("id", id);
+
+      expect(count).toBe(0);
+      // Still there, and still usable by whoever it was sent to.
+      const { data: live } = await fixture.a.client
+        .from("household_invites")
+        .select("id")
+        .eq("id", id);
+      expect(live).toHaveLength(1);
+    });
+
+    it("lets a plain member remove themselves, which is how a phone leaves", async () => {
+      const { count } = await member.client
+        .from("household_members")
+        .delete({ count: "exact" })
+        .eq("user_id", member.userId);
+
+      expect(count).toBe(1);
+      const { data } = await member.client.from("entries").select("id");
+      expect(data).toEqual([]);
+    });
+
+    it("refuses a plain member the removing of the admin", async () => {
+      // The account that invited them must not be removable by them.
+      const { data: admin } = await fixture.a.client.auth.getUser();
+
+      const { count } = await member.client
+        .from("household_members")
+        .delete({ count: "exact" })
+        .eq("user_id", admin.user!.id);
+
+      expect(count).toBe(0);
+    });
+
+    it("refuses a plain member the removing of another plain member", async () => {
+      const other = await joinA("other-member");
+      try {
+        const { count } = await member.client
+          .from("household_members")
+          .delete({ count: "exact" })
+          .eq("user_id", other.userId);
+
+        expect(count).toBe(0);
+      } finally {
+        await other.remove();
+      }
+    });
+
+    it("lets the admin remove a plain member", async () => {
+      const { count } = await fixture.a.client
+        .from("household_members")
+        .delete({ count: "exact" })
+        .eq("user_id", member.userId);
+
+      expect(count).toBe(1);
+    });
+
+    it("refuses the admin the removing of themselves", async () => {
+      // Neither policy matches: one excludes yourself, the other refuses an
+      // admin. So a Household always keeps the account that runs it.
+      const { data: admin } = await fixture.a.client.auth.getUser();
+
+      const { count } = await fixture.a.client
+        .from("household_members")
+        .delete({ count: "exact" })
+        .eq("user_id", admin.user!.id);
+
+      expect(count).toBe(0);
+    });
+  });
+
   describe("revoking a membership", () => {
     it("ends that phone's access at once", async () => {
       // Story 4. No cached grant, no session to wait out: the next read is
@@ -426,7 +565,7 @@ describe("Household invites (real database)", () => {
       expect(count).toBe(0);
     });
 
-    it("refuses to remove yourself, so a Household keeps at least one member", async () => {
+    it("refuses the admin the removing of themselves", async () => {
       const { data: me } = await fixture.a.client.auth.getUser();
 
       const { count } = await fixture.a.client

@@ -16,6 +16,8 @@ The claim is an `UPDATE ... WHERE accepted_at is null` returning the Household, 
 
 Revoking an invite is deleting the row; revoking a membership is deleting the `household_members` row. Every policy reads membership live, so access ends on the next query with no cached grant to expire. A removed member's sign-in survives, attached to nothing — it can authenticate and sees the "not attached to a household" state. Deleting the identity too would mean reaching for the service role again, for a reason that is not storage, to end access that has already ended.
 
+Who may issue an invite, and who may remove whom, is now the admin's and is recorded separately in [ADR 0007](0007-one-admin-per-household.md); the paragraph below about nobody removing themselves is superseded there.
+
 A credential already in a Household cannot redeem an invite into a second one. Nothing in the app can reach that — redeeming always mints a fresh credential — but `accept_household_invite` is granted to `authenticated` at large, and `requireHousehold()` reads `limit(1)` and says in as many words that a credential in two Households is the thing that would force it to start asking which. The function refuses rather than leaving an RPC that can create a state the rest of the app cannot represent. The invite is left unspent, so whoever it was meant for can still use it.
 
 Nobody can remove themselves. Signing out is how you leave, and the rule means a Household can never be emptied of members and stranded with Entries nobody can reach.

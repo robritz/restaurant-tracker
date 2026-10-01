@@ -31,16 +31,15 @@ export default async function HouseholdPage() {
 
   // Emails come from a definer function because auth.users is beyond any
   // policy here; it scopes itself to the caller's Household.
-  const [{ data: members }, { data: invites }, { data: user }] = await Promise.all([
+  const [{ data: members }, { data: invites }] = await Promise.all([
     supabase.rpc("household_members_for_current_user"),
+    // Empty for a member who is not the admin -- the select policy is theirs
+    // too, so this needs no branch here.
     supabase
       .from("household_invites")
       .select("id, created_at, expires_at, accepted_at")
       .order("created_at", { ascending: false }),
-    supabase.auth.getUser(),
   ]);
-
-  const me = user?.user?.id ?? null;
 
   return (
     <Container maxWidth="sm" sx={{ py: 4 }}>
@@ -58,7 +57,8 @@ export default async function HouseholdPage() {
         <HouseholdMembers
           members={(members ?? []) as Member[]}
           invites={invites ?? []}
-          currentUserId={me}
+          currentUserId={context.userId}
+          isAdmin={context.isAdmin}
         />
       </Stack>
     </Container>

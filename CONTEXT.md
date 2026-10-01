@@ -9,8 +9,12 @@ The family whose Entries these are — the owner of everything tracked here, and
 _Avoid_: Account (blurs the credential with the owner), User (implies one person)
 
 **Member**:
-One credential's membership of a Household — the thing that grants access, and the thing revoking access removes. A Member is a way *in*, not a person the app knows anything about: Members are interchangeable, nothing is attributed to one, and removing one takes nothing away with it. Created either by the seed or by redeeming an Invite; never by signing up.
+One credential's membership of a Household — the thing that grants access, and the thing revoking access removes. A Member is a way *in*, not a person the app knows anything about: nothing is attributed to one, and removing one takes nothing away with it. Created either by the seed or by redeeming an Invite; never by signing up. Every Member is either the Household's Admin or a plain Member.
 _Avoid_: User, Account (both imply an owner of data, when a Household owns everything)
+
+**Admin**:
+The one Member who runs a Household — the account it was seeded with. The Admin issues and revokes Invites and removes any other Member; a plain Member does none of those and can only remove themselves. The Admin cannot remove themselves, so a Household always has one. Admin is a role on a membership, not a different kind of credential, and it confers nothing over Entries: an Admin's dishes are the Household's like anyone else's.
+_Avoid_: Owner (nobody owns a Household; it owns), Superuser
 
 **Invite**:
 A single-use, expiring link that lets one more credential become a Member of the Household that issued it. The token lives only in the link — only its hash is stored — so an Invite is shown once and cannot be recovered, only reissued. Always scoped to one Household: redeeming it can never land someone in another.

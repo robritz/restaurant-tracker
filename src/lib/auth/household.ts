@@ -10,6 +10,18 @@ export type HouseholdContext = {
    */
   supabase: SupabaseDataClient;
   householdId: string;
+  /** The caller's own credential, for telling them apart from another member. */
+  userId: string;
+  /**
+   * Whether the caller runs this Household: the account it was seeded with.
+   * Inviting a phone and removing somebody else's are the admin's; everyone
+   * else can only remove themselves.
+   *
+   * The policies enforce all of that independently -- this is here so a route
+   * can say "only an admin can do that" instead of surfacing a refusal the
+   * caller cannot interpret.
+   */
+  isAdmin: boolean;
 };
 
 /**
@@ -34,24 +46,31 @@ export const NO_HOUSEHOLD_MESSAGE =
  * valid session -- but a half-provisioned database, since the seed always
  * creates an identity and its Household together.
  *
- * Note the absence of a `user_id` filter on the lookup. `household_members`
- * is itself behind RLS and shows a caller only their own memberships, so the
- * filter would be a second copy of a rule the database already enforces --
- * and the copy, not the original, is the one that can drift.
+ * The lookup goes through `current_household_membership()` rather than
+ * reading `household_members` directly. An earlier version did read it
+ * directly with no `user_id` filter, reasoning that RLS "shows a caller only
+ * their own memberships" -- which was never so. The select policy is
+ * household-wide, so a caller sees every member; with one member per
+ * Household that was harmless, and with a second phone and a role column it
+ * would have reported an arbitrary member's role as the caller's.
  *
- * One Household per credential today. `limit(1)` is what that assumption
- * looks like in code: when a credential can join two, this is the call that
- * has to start asking which one.
+ * One Household per credential still. The function's own `limit(1)` is that
+ * assumption, and `accept_household_invite` refuses a credential already in
+ * one, so nothing can produce a second.
  */
 export async function requireHousehold(): Promise<HouseholdContext | null> {
   const supabase = await createSupabaseServerClient();
 
-  const { data, error } = await supabase
-    .from("household_members")
-    .select("household_id")
-    .limit(1)
-    .maybeSingle();
+  const { data, error } = await supabase.rpc("current_household_membership");
+  const membership = data?.[0];
 
-  if (error || !data) return null;
-  return { supabase, householdId: data.household_id };
+  if (error || !membership) return null;
+  // Compared against "admin" rather than against "member", so a role this
+  // code has not been taught about reads as no permission at all.
+  return {
+    supabase,
+    householdId: membership.household_id,
+    userId: membership.user_id,
+    isAdmin: membership.role === "admin",
+  };
 }

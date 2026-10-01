@@ -127,16 +127,19 @@ export type Database = {
         Row: {
           created_at: string
           household_id: string
+          role: string
           user_id: string
         }
         Insert: {
           created_at?: string
           household_id: string
+          role?: string
           user_id: string
         }
         Update: {
           created_at?: string
           household_id?: string
+          role?: string
           user_id?: string
         }
         Relationships: [
@@ -203,6 +206,15 @@ export type Database = {
         Args: { p_token_hash: string }
         Returns: string
       }
+      admin_household_ids_for_current_user: { Args: never; Returns: string[] }
+      current_household_membership: {
+        Args: never
+        Returns: {
+          household_id: string
+          role: string
+          user_id: string
+        }[]
+      }
       household_for_invite: { Args: { p_token_hash: string }; Returns: string }
       household_ids_for_current_user: { Args: never; Returns: string[] }
       household_members_for_current_user: {
@@ -210,6 +222,7 @@ export type Database = {
         Returns: {
           email: string
           joined_at: string
+          role: string
           user_id: string
         }[]
       }

@@ -1,13 +1,15 @@
 import { NextResponse } from "next/server";
 import { NO_HOUSEHOLD_MESSAGE, requireHousehold } from "@/lib/auth/household";
+import { ADMIN_ONLY_MESSAGE } from "@/lib/auth/admin";
 
 /**
  * Revokes an invite by deleting it. There is no "revoked" state to keep: a
  * row that is gone cannot be redeemed, and nothing is simpler to be sure of.
  *
- * No household filter here on purpose. The delete policy only matches rows in
- * the caller's own Household, so adding one would duplicate a rule the
- * database already enforces -- and the copy is the half that can drift.
+ * The admin's, like issuing one. No household filter here on purpose: the
+ * delete policy only matches rows in the caller's own Household, so adding
+ * one would duplicate a rule the database already enforces -- and the copy is
+ * the half that can drift.
  */
 export async function DELETE(
   _request: Request,
@@ -16,6 +18,10 @@ export async function DELETE(
   const context = await requireHousehold();
   if (!context) {
     return NextResponse.json({ error: NO_HOUSEHOLD_MESSAGE }, { status: 403 });
+  }
+
+  if (!context.isAdmin) {
+    return NextResponse.json({ error: ADMIN_ONLY_MESSAGE }, { status: 403 });
   }
 
   const { id } = await params;

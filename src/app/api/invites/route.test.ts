@@ -29,7 +29,7 @@ function post() {
 describe("POST /api/invites", () => {
   it("hands back a link the issuer can copy, and the token only here", async () => {
     const supabase = stubSupabase();
-    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID });
+    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID, isAdmin: true });
 
     const response = await post();
     const body = await response.json();
@@ -42,7 +42,7 @@ describe("POST /api/invites", () => {
 
   it("stores the hash, never the token", async () => {
     const supabase = stubSupabase();
-    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID });
+    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID, isAdmin: true });
 
     const body = await (await post()).json();
     const token = body.path.replace("/join/", "");
@@ -54,7 +54,7 @@ describe("POST /api/invites", () => {
 
   it("stamps the issuer's own Household, so an invite reaches only it", async () => {
     const supabase = stubSupabase();
-    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID });
+    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID, isAdmin: true });
 
     await post();
 
@@ -63,7 +63,7 @@ describe("POST /api/invites", () => {
 
   it("expires the invite", async () => {
     const supabase = stubSupabase();
-    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID });
+    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID, isAdmin: true });
 
     const before = Date.now();
     await post();
@@ -71,6 +71,19 @@ describe("POST /api/invites", () => {
 
     expect(expiresAt).toBeGreaterThanOrEqual(before + INVITE_LIFETIME_MS);
     expect(expiresAt).toBeLessThanOrEqual(Date.now() + INVITE_LIFETIME_MS);
+  });
+
+  it("refuses a member who is not the admin", async () => {
+    // Inviting is the admin's. A plain member is told so, rather than
+    // meeting a policy refusal they cannot interpret.
+    const supabase = stubSupabase();
+    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID, isAdmin: false });
+
+    const response = await post();
+
+    expect(response.status).toBe(403);
+    expect(supabase.insert).not.toHaveBeenCalled();
+    expect((await response.json()).path).toBeUndefined();
   });
 
   it("issues nothing for a caller who belongs to no Household", async () => {
@@ -84,7 +97,7 @@ describe("POST /api/invites", () => {
 
   it("reports a refused insert rather than handing back a dead link", async () => {
     const supabase = stubSupabase({ data: null, error: { message: "denied" } });
-    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID });
+    requireHousehold.mockResolvedValue({ supabase, householdId: HOUSEHOLD_ID, isAdmin: true });
 
     const response = await post();
 

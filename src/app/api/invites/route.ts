@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { NO_HOUSEHOLD_MESSAGE, requireHousehold } from "@/lib/auth/household";
+import { ADMIN_ONLY_MESSAGE } from "@/lib/auth/admin";
 import {
   hashInviteToken,
   invitePath,
@@ -16,11 +17,19 @@ import {
  *
  * A path rather than an absolute URL: the browser appends its own origin, so
  * a spoofed Host header cannot steer an invite at another site.
+ *
+ * The admin's alone. The insert policy says so too and is the real
+ * enforcement; the check here exists so a member gets an answer they can
+ * read rather than a row-level security error.
  */
 export async function POST() {
   const context = await requireHousehold();
   if (!context) {
     return NextResponse.json({ error: NO_HOUSEHOLD_MESSAGE }, { status: 403 });
+  }
+
+  if (!context.isAdmin) {
+    return NextResponse.json({ error: ADMIN_ONLY_MESSAGE }, { status: 403 });
   }
 
   const token = newInviteToken();

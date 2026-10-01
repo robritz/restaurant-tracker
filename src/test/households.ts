@@ -164,9 +164,12 @@ export async function seedTwoHouseholds(): Promise<Fixture> {
     }
     created.households.push(household.id);
 
+    // Admin, like the account `npm run seed` creates. A fixture whose
+    // Households had no admin could not exercise the rules that matter, and
+    // would quietly disagree with every real database.
     const { error: memberError } = await admin
       .from("household_members")
-      .insert({ household_id: household.id, user_id: user.user.id });
+      .insert({ household_id: household.id, user_id: user.user.id, role: "admin" });
     if (memberError) throw new Error(`seed membership ${label}: ${memberError.message}`);
 
     const entryIds: Record<string, string> = {};
