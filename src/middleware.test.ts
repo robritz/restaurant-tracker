@@ -76,6 +76,22 @@ describe("middleware", () => {
       expect(response.headers.get("location")).toBeNull();
     });
 
+    it("lets someone redeem an invite, since a joiner has no session yet", async () => {
+      for (const path of ["/join/abc123", "/api/invites/accept"]) {
+        const response = await middleware(request(path));
+        expect(response.status, path).toBe(200);
+        expect(response.headers.get("location"), path).toBeNull();
+      }
+    });
+
+    it("still guards issuing and revoking invites", async () => {
+      // Only acceptance is public. A signed-out caller must not be able to
+      // mint an invite into somebody else's Household.
+      for (const path of ["/api/invites", "/api/invites/invite-uuid-1", "/api/members/user-uuid-2"]) {
+        expect((await middleware(request(path))).status, path).toBe(401);
+      }
+    });
+
     it("lets the sign-in and sign-out routes through", async () => {
       await expect(
         middleware(request("/api/auth/login")).then((r) => r.status),

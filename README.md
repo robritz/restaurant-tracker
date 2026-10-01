@@ -62,7 +62,17 @@ Open [http://localhost:3000](http://localhost:3000), sign in with the credential
 
 The app is closed: every page and every API route requires a session. There is **no self-signup** — `enable_signup` is off in `supabase/config.toml`, and the one login is created by `npm run seed` from the values in `.env.local`.
 
-That login belongs to a **Household**, which is the family rather than a person (see [`CONTEXT.md`](CONTEXT.md) and [ADR 0004](docs/adr/0004-household-owns-entries.md)). A second phone joining the same map later is a membership row, not a shared password. Every Entry belongs to a Household, and the database enforces it: one Household's dishes are not merely filtered out of another's responses, they are not readable at all.
+That login belongs to a **Household**, which is the family rather than a person (see [`CONTEXT.md`](CONTEXT.md) and [ADR 0004](docs/adr/0004-household-owns-entries.md)). Every Entry belongs to a Household, and the database enforces it: one Household's dishes are not merely filtered out of another's responses, they are not readable at all.
+
+### A second phone
+
+A second person joins by **invitation from someone already in the Household**, not by registering ([ADR 0006](docs/adr/0006-invites-create-credentials.md)). On the Household screen a member creates an invite link and sends it however they like; whoever opens it chooses their own email and password, and lands on the same map. No password is ever shared.
+
+An invite works **once** and **expires after seven days**, and only its SHA-256 hash is stored — the token lives in the link and nowhere else, so it is shown exactly once and a lost link means issuing another. A token can only ever join the Household that issued it.
+
+Removing a phone is deleting its membership, and takes effect on its next query: every policy reads membership live, so there is no cached grant to wait out. You cannot remove yourself — signing out is how you leave, and the rule means a Household can never be emptied of members and stranded with Entries nobody can reach.
+
+Self-signup stays off throughout. `/join/<token>` and the route behind it are the only things reachable without a session, because a joiner by definition has none; issuing and revoking stay behind the login.
 
 > **Tip:** Photos taken on a phone with location services enabled are the best test cases. Images shared via most messaging apps or social platforms have their EXIF/GPS stripped.
 
@@ -116,10 +126,32 @@ control.
 - `src/lib/supabase/cookies.ts` -- marks session cookies `HttpOnly`.
 - `src/lib/supabase/env.ts` -- reads the env vars above.
 
+Three `SECURITY DEFINER` functions sit alongside the policies, each scoped so
+it can only ever answer about the caller:
+
+- `household_ids_for_current_user()` -- which Households the caller is in.
+  Every policy above is written against it.
+- `household_for_invite(token_hash)` -- the Household a live invite belongs
+  to, or null. The one function granted to `anon`, because whoever is
+  redeeming an invite has no session yet; it returns an opaque id and nothing
+  else, so a bad token learns only that it is bad.
+- `accept_household_invite(token_hash)` -- claims an invite and joins
+  `auth.uid()` to its Household, atomically. `authenticated` only: there is
+  no anonymous path into a Household.
+- `household_members_for_current_user()` -- the caller's fellow members and
+  their emails, which live in `auth.users` and no policy here can reach.
+
 Every table has policies, and they -- not the routes -- are what keep one
 Household's dishes away from another's:
 
 - `households` and `household_members` are readable only by their own members.
+  A member may delete *another* member of their own Household -- that is how
+  access is revoked -- but never themselves.
+- `household_invites` are readable, issuable and revocable only by members of
+  the Household they belong to, so an invite cannot be aimed at anyone else's
+  map. There is no update policy: `accepted_at` is set only by
+  `accept_household_invite()`, which is what makes "single use" something
+  that cannot be undone by rewriting the row.
 - `entries` are readable and insertable only by the Household that owns them.
   A route that forgets to filter cannot leak another Household's dishes,
   because the rows are not there to return. There is deliberately no update
@@ -237,16 +269,24 @@ src/
 │   ├── api/place-logs/[id]/route.ts   # Server route: one Place with the dishes eaten there
 │   ├── api/auth/login/route.ts        # Server route: exchange email + password for a session
 │   ├── api/auth/logout/route.ts       # Server route: end the session
+│   ├── api/invites/route.ts           # Server route: issue an invite into your Household
+│   ├── api/invites/[id]/route.ts      # Server route: revoke an invite
+│   ├── api/invites/accept/route.ts    # Server route: redeem one (public -- a joiner has no session)
+│   ├── api/members/[userId]/route.ts  # Server route: remove a phone's access
 │   ├── layout.tsx                     # Root layout: document shell and MUI theme only
 │   ├── login/page.tsx                 # The sign-in screen (outside the app's chrome)
+│   ├── join/[token]/page.tsx          # Redeem an invite (also outside the chrome)
 │   └── (app)/                         # Everything behind the login
 │       ├── layout.tsx                 # Tab bar + the persistent map
 │       ├── map/page.tsx               # Map tab route (the map itself lives in the layout)
+│       ├── household/page.tsx         # Who is in the Household; invite and remove
 │       └── page.tsx                   # Add: photo select -> pick a place -> title -> save
 ├── middleware.ts                      # The gate: redirect vs 401, and session refresh
 ├── components/
-│   ├── AppTabs.tsx                    # Add / Map tabs, and sign out
+│   ├── AppTabs.tsx                    # Add / Map tabs, household, and sign out
 │   ├── LoginForm.tsx                  # Email + password, posted to /api/auth/login
+│   ├── JoinForm.tsx                   # Choose a sign-in against an invite
+│   ├── HouseholdMembers.tsx           # Members, invite links, and revocation
 │   ├── SignOutButton.tsx              # Ends the session with a hard navigation
 │   ├── CaptureForm.tsx                # The Add tab's flow
 │   ├── PersistentMap.tsx              # Keeps the map alive across tab navigation
@@ -259,6 +299,9 @@ src/
 │   ├── auth/
 │   │   ├── household.ts               # requireHousehold(): the caller's Household + an RLS client
 │   │   └── redirect.ts                # Where to land after signing in, minus open redirects
+│   ├── invites/
+│   │   ├── token.ts                   # Minting, hashing and expiring an invite token
+│   │   └── state.ts                   # Whether an invite row reads as live, used or expired
 │   ├── map/
 │   │   ├── geolocation.ts             # What a failed locate-me says, and for how long
 │   │   ├── pins.ts                    # Camera framing and pin stacking
@@ -276,6 +319,7 @@ src/
 test/
 ├── households.ts              # Two-Household fixture for the integration suite
 ├── policies.integration.test.ts  # What a signed-in member can and cannot do
+├── invites.integration.test.ts   # Invites, joining, and revocation against real policies
 └── setup-env.ts               # Loads .env.local for the integration suite
 
 scripts/
@@ -283,7 +327,7 @@ scripts/
 
 supabase/
 ├── config.toml                # Supabase CLI project config
-└── migrations/                # places, entries, households, household_members
+└── migrations/                # places, entries, households, household_members, household_invites
 ```
 
 ## Testing
@@ -338,7 +382,7 @@ command in would only teach everyone to ignore a red step.
 ## Known limitations (it's a POC)
 
 - Only surfaces `food_and_drink` businesses within a fixed ~60m radius.
-- One Household, seeded by hand -- no self-signup, and no way to invite a second login into the same Household yet.
+- One Household, seeded by hand. A second phone joins by invite from a member; there is still no self-signup, and no way to create a *second* Household from inside the app.
 - Photo objects predating Household-keyed paths keep their old `<place>/<uuid>` layout, so "remove a Household by prefix" does not yet cover them.
 - Route handlers are tested; the UI is not.
 - Photos without EXIF GPS fall back to manual restaurant search.

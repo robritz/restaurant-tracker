@@ -7,8 +7,13 @@ export const LOGIN_PATH = "/login";
  * Reachable without a session. `/login` is obvious -- guarding it would leave
  * nowhere to sign in. `/api/auth/*` is the pair of routes that create and
  * destroy the session itself, so neither can require one.
+ *
+ * Redeeming an invite is the third: someone joining a Household has no
+ * session yet, and the token in the link is what stands in for one. Note how
+ * narrow this is -- `/api/invites/accept` exactly, never `/api/invites`, so
+ * issuing and revoking stay behind the login.
  */
-const PUBLIC_PATHS = [LOGIN_PATH, "/api/auth"];
+const PUBLIC_PATHS = [LOGIN_PATH, "/api/auth", "/join", "/api/invites/accept"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some(
