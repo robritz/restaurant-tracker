@@ -177,6 +177,36 @@ Deploying the app needs `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and
 `SUPABASE_SERVICE_ROLE_KEY` set to the hosted project's values -- the
 `.env.local` written during setup points at local Supabase.
 
+### Deployment
+
+Production is deployed by the CI workflow, not by Vercel's Git integration,
+so that nothing reaches the live site until the suites have passed. Before
+this, Vercel built on push and knew nothing about a workflow run -- a commit
+whose CI failed had already been deployed.
+
+`vercel.json` sets `git.deploymentEnabled.main` to `false`, which stops Vercel
+auto-deploying *that branch only*. Every other branch still gets a preview on
+push, so a pull request has a URL to click before the suites finish; only
+production waits.
+
+The deploy job needs three repository secrets, under
+**Settings -> Secrets and variables -> Actions**:
+
+| Secret | Where it comes from |
+| ------------------- | ----------------------------------------------------- |
+| `VERCEL_TOKEN`      | <https://vercel.com/account/tokens> |
+| `VERCEL_ORG_ID`     | `.vercel/project.json` after `npx vercel link`, or project settings |
+| `VERCEL_PROJECT_ID` | the same place |
+
+Nothing else moves into GitHub. The job runs `vercel pull`, so `SUPABASE_URL`,
+the keys and the Mapbox tokens stay in Vercel's own environment settings
+rather than being duplicated as secrets in two places.
+
+**Add those secrets before merging a change to this workflow.** They are inert
+until something reads them, and without them the deploy job fails while
+`vercel.json` has already stopped Vercel from covering for it -- production
+would keep serving its last deployment and quietly stop receiving new ones.
+
 ## Scripts
 
 | Command                  | Description                            |

@@ -99,3 +99,87 @@ jobs:
         if: always()
         continue-on-error: true
         run: npm run supabase:stop
+
+  # Production deploys wait for the suites above. Vercel's own Git
+  # integration cannot: it builds on push and knows nothing about a workflow
+  # run, which is how a commit whose CI failed reached a deployment before
+  # this job existed.
+  #
+  # Previews are deliberately left to Vercel. They go out on every branch
+  # push, so a pull request still has a URL to click before the suites
+  # finish; only production is gated.
+  deploy:
+    name: Deploy to production
+    needs: test
+    # Pushes to main only -- never a pull request, whose head commit is not
+    # what would ship. `needs: test` already means a red suite stops this.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    # Surfaces the deployment and its URL in the repo's Production
+    # environment, and gives somewhere to hang an approval rule later.
+    environment:
+      name: Production
+      url: ${{ steps.deploy.outputs.url }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # Named outright, because the alternative is the Vercel CLI failing on
+      # an empty token with a message about authentication that says nothing
+      # about which repository setting is missing. Add these before merging
+      # the workflow, not after: they are inert until something reads them.
+      - name: Check the Vercel credentials are present
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          missing=()
+          for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_PROJECT_ID; do
+            [ -n "${!name:-}" ] || missing+=("$name")
+          done
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::error::Missing repository secrets: ${missing[*]}."
+            echo "Add them under Settings -> Secrets and variables -> Actions."
+            echo "VERCEL_TOKEN comes from https://vercel.com/account/tokens;"
+            echo "the org and project ids are in .vercel/project.json after"
+            echo "running 'npx vercel link', or in the project's settings."
+            exit 1
+          fi
+
+      # Pulls the project's settings and its production environment
+      # variables from Vercel, so SUPABASE_* and the Mapbox tokens stay in
+      # Vercel's own settings and are not duplicated as GitHub secrets.
+      - name: Fetch Vercel project settings
+        run: npx vercel@62 pull --yes --environment=production --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      # Built here rather than on Vercel, so what gets promoted is the exact
+      # tree the suites just ran against.
+      - name: Build
+        run: npx vercel@62 build --prod --token "$VERCEL_TOKEN"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+
+      - name: Deploy
+        id: deploy
+        run: |
+          url="$(npx vercel@62 deploy --prebuilt --prod --token "$VERCEL_TOKEN")"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "Deployed $GITHUB_SHA to $url"
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
