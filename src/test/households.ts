@@ -52,10 +52,15 @@ export type Fixture = {
    */
   busyPlaceId: string;
   /**
-   * The timestamp a seeded dish was given, so a test can assert the exact
-   * date a response should carry rather than merely that two differ.
+   * The instant a seeded dish was given, in epoch milliseconds, so a test can
+   * assert the exact moment a response should carry rather than merely that
+   * two differ.
+   *
+   * Milliseconds rather than a string on purpose: Postgres trims trailing
+   * zeros from the fractional seconds, so the same instant has several valid
+   * renderings and string equality is the wrong question.
    */
-  capturedAt: (title: string) => string;
+  capturedAtMs: (title: string) => number;
   cleanup: () => Promise<void>;
 };
 
@@ -101,11 +106,20 @@ type SeedEntry = {
 
 export async function seedTwoHouseholds(): Promise<Fixture> {
   const admin = serviceRoleClient();
-  // Date.now() alone is both the uniqueness key and the clock, so two
-  // fixtures built in the same millisecond would collide on mapbox_id -- and
-  // the loser's cleanup would sweep the winner's Places. The suffix makes the
-  // key unique without disturbing the timestamps derived from `run`.
-  const run = Date.now();
+  // Two things, deliberately separated. `tag` is the uniqueness key: a random
+  // suffix, because Date.now() alone would let two fixtures built in the same
+  // millisecond collide on mapbox_id, and the loser's cleanup would then sweep
+  // the winner's Places. `run` is only a clock, and fixtures built in the same
+  // second share it -- harmless, since no assertion compares timestamps across
+  // fixtures, and ordering within one is set by distinct `daysAgo` values.
+  // Floored to a whole second on purpose, as a tripwire. Postgres trims
+  // trailing zeros from fractional seconds, so a seeded .400 comes back as
+  // ".4" and .000 as no fraction at all. A test that compares the rendered
+  // string therefore failed about one run in ten, which is how this suite
+  // shipped flaky. Comparisons now go through Date and are immune -- flooring
+  // makes the trimmed rendering the case on *every* run, so if anyone
+  // reintroduces a string comparison it fails at once instead of rarely.
+  const run = Math.floor(Date.now() / 1000) * 1000;
   const tag = `${run}-${Math.random().toString(36).slice(2, 8)}`;
   const created = { users: [] as string[], households: [] as string[], paths: [] as string[] };
   const capturedAtByTitle = new Map<string, string>();
@@ -269,12 +283,10 @@ export async function seedTwoHouseholds(): Promise<Fixture> {
     bOnlyPlaceId,
     emptyPlaceId,
     busyPlaceId,
-    capturedAt: (title) => {
+    capturedAtMs: (title) => {
       const value = capturedAtByTitle.get(title);
       if (!value) throw new Error(`No seeded dish titled "${title}".`);
-      // PostgREST renders timestamptz with a +00:00 offset rather than the
-      // trailing Z that toISOString() produces; compare like for like.
-      return value.replace(/\.(\d{3})Z$/, ".$1+00:00");
+      return new Date(value).getTime();
     },
     cleanup,
   };
