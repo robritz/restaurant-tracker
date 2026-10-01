@@ -10,6 +10,13 @@ import type { PlaceLog } from "@/app/api/place-logs/[id]/route";
 import { skeletonCount } from "@/lib/place-logs";
 import DishGallery, { DishGallerySkeleton } from "./DishGallery";
 
+/** A fetch outcome, tagged with the Place it is an outcome *for*. */
+type PlaceLogResult = {
+  id: string;
+  placeLog: PlaceLog | null;
+  failed: boolean;
+};
+
 /**
  * What have we eaten here? The Place's name and address come from the pin
  * data already in hand, so they're on screen the instant a pin is tapped --
@@ -27,14 +34,10 @@ export default function PlaceLogPanel({
   // dishes cannot sit under this Place's name: a result for any other id is
   // simply not this Place's, and reads as still-loading. That is what makes
   // the stale state unreachable, rather than an effect racing to clear it.
-  const [result, setResult] = useState<{
-    id: string;
-    placeLog: PlaceLog | null;
-    failed: boolean;
-  } | null>(null);
-  const current = result?.id === summary.id ? result : null;
-  const placeLog = current?.placeLog ?? null;
-  const failed = current?.failed ?? false;
+  const [result, setResult] = useState<PlaceLogResult | null>(null);
+  const forThisPlace = result?.id === summary.id ? result : null;
+  const placeLog = forThisPlace?.placeLog ?? null;
+  const failed = forThisPlace?.failed ?? false;
 
   useEffect(() => {
     let active = true;
