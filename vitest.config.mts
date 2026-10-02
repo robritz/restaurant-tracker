@@ -8,7 +8,9 @@ export default defineConfig({
     // left to the default; it matters most there, and symmetry here keeps the
     // two suites answerable to the same rule.
     passWithNoTests: false,
-    include: ["src/**/*.test.ts"],
+    // Operator scripts live outside src/ and are plain .mjs so `node` can run
+    // them without a build step; their tests belong to this suite all the same.
+    include: ["src/**/*.test.ts", "scripts/**/*.test.mjs"],
     // Integration tests need the local Supabase stack, so they are a
     // separate project (vitest.integration.config.mts). `npm test` stays
     // hermetic.
