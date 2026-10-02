@@ -119,6 +119,29 @@ URL is the only way in, and `/api/entries/[id]/photo` reads the Entry under
 RLS before it signs anything -- so the prefix is for operators, not access
 control.
 
+Photos uploaded before that layout existed were keyed `<place>/<uuid>`, and
+`npm run relocate:photos` moves them under their Household (#50). It is a
+script rather than a migration because storage objects are not rows the
+migration system owns, and because it has to be runnable as a dry run against
+the hosted project first -- which is what it does by default; add `--apply` to
+carry it out. Every step checks for its own outcome first, so a run
+interrupted anywhere is finished by running it again, and a complete run that
+is repeated changes nothing.
+
+It reads its credentials from `.env.local` like the seed does, so pointing it
+at the hosted project means pointing it at another env file -- and take a
+database dump first, since the last step of a move is a delete:
+
+```bash
+RELOCATE_ENV_FILE=.env.hosted npm run relocate:photos            # dry run
+RELOCATE_ENV_FILE=.env.hosted npm run relocate:photos -- --apply
+```
+
+Both modes print the project URL they are about to act on before doing
+anything. An object under a legacy prefix that no Entry points at -- an upload
+whose Entry insert died -- is reported and left alone: with no Entry there is
+no Household to file it under.
+
 - `src/lib/supabase/client.ts` -- `createSupabaseClient()` (anonymous,
   RLS-enforced) and `createSupabaseServiceRoleClient()` (bypasses RLS;
   server-side only). The service-role client is now
@@ -280,6 +303,7 @@ would keep serving its last deployment and quietly stop receiving new ones.
 | `npm run supabase:status` | Print local Supabase URL/keys           |
 | `npm run supabase:reset`  | Reapply migrations locally, then re-seed |
 | `npm run seed`            | Create the Household and its admin login |
+| `npm run relocate:photos` | Report pre-Household photo paths; `-- --apply` to move them (`RELOCATE_ENV_FILE` to target another project) |
 | `npm run gen:types`       | Regenerate Supabase TypeScript types    |
 
 ## Project structure
@@ -348,10 +372,14 @@ test/
 ├── policies.integration.test.ts  # What a signed-in member can and cannot do
 ├── invites.integration.test.ts   # Invites, joining, roles and revocation against real policies
 ├── two-members.integration.test.ts # Both phones through the real routes
+├── relocate-photos.integration.test.ts # The photo move against a real bucket
 └── setup-env.ts               # Loads .env.local for the integration suite
 
 scripts/
-└── seed-household.mjs         # Creates the one Household and its login
+├── seed-household.mjs         # Creates the one Household and its login
+├── supabase-env.mjs           # Project URL and service-role key, read once
+├── relocate-photos.mjs        # Moves pre-Household photo objects under their Household
+└── relocate-photos.test.mjs   # Its unit tests (ordering and re-runnability)
 
 supabase/
 ├── config.toml                # Supabase CLI project config
@@ -360,7 +388,8 @@ supabase/
 
 ## Testing
 
-`vitest` runs against files under `src/`, no browser/jsdom environment.
+`vitest` runs against files under `src/`, plus the operator scripts' own
+tests (`scripts/**/*.test.mjs`); no browser/jsdom environment.
 Route Handlers are tested by importing the route module directly,
 constructing a `Request`, and asserting on the returned `Response`.
 
@@ -411,7 +440,6 @@ red from its first run is a step everyone learns to ignore.
 
 - Only surfaces `food_and_drink` businesses within a fixed ~60m radius.
 - One Household, seeded by hand. A second phone joins by invite from a member; there is still no self-signup, and no way to create a *second* Household from inside the app.
-- Photo objects predating Household-keyed paths keep their old `<place>/<uuid>` layout, so "remove a Household by prefix" does not yet cover them.
 - Route handlers are tested; the UI is not.
 - Photos without EXIF GPS fall back to manual restaurant search.
 - Not optimized or hardened for production use.
