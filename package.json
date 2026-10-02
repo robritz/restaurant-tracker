@@ -15,6 +15,7 @@
     "supabase:status": "supabase status",
     "supabase:reset": "supabase db reset && npm run seed",
     "seed": "node --env-file=.env.local scripts/seed-household.mjs",
+    "relocate:photos": "node --env-file=.env.local scripts/relocate-photos.mjs",
     "gen:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts"
   },
   "dependencies": {
