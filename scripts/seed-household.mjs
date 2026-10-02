@@ -8,24 +8,7 @@
 // Household. Run with `node --env-file=.env.local`, which is where the
 // credential lives; it is never committed.
 import { createClient } from "@supabase/supabase-js";
-
-function readEnv(name) {
-  const value = process.env[name]?.trim();
-  if (!value) {
-    console.error(`Missing required environment variable: ${name}`);
-    console.error("Copy .env.local.example to .env.local and fill it in.");
-    process.exit(1);
-  }
-  return value;
-}
-
-// Same defensive strip as src/lib/supabase/env.ts: `supabase status` prints
-// API_URL next to REST_URL, and pasting the wrong one fails obscurely.
-function normalizeUrl(url) {
-  return url
-    .replace(/\/(rest|auth|graphql|storage|functions)\/v1\/?$/, "")
-    .replace(/\/$/, "");
-}
+import { normalizeUrl, readEnv } from "./supabase-env.mjs";
 
 const url = normalizeUrl(readEnv("SUPABASE_URL"));
 const serviceRoleKey = readEnv("SUPABASE_SERVICE_ROLE_KEY");

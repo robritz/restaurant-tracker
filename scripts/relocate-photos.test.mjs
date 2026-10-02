@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { planEntry, relocateEntry } from "./relocate-photos.mjs";
+import { planEntry, relocateEntry, unclaimedLegacyObjects } from "./relocate-photos.mjs";
 
 const HOUSEHOLD = "household-1";
 
@@ -104,13 +104,47 @@ describe("planEntry", () => {
   });
 });
 
+describe("unclaimedLegacyObjects", () => {
+  const plans = [planEntry(entry())];
+
+  it("ignores objects an Entry accounts for, under either layout", () => {
+    expect(
+      unclaimedLegacyObjects(
+        [
+          "place-1/abc.jpg",
+          "place-1/abc-thumb.webp",
+          `${HOUSEHOLD}/place-1/abc.jpg`,
+          `${HOUSEHOLD}/place-1/abc-thumb.webp`,
+        ],
+        plans,
+      ),
+    ).toEqual([]);
+  });
+
+  it("names a legacy object no Entry points at", () => {
+    // An upload whose insert died: no row, so no Household to file it under.
+    expect(unclaimedLegacyObjects(["place-9/orphan.jpg"], plans)).toEqual([
+      "place-9/orphan.jpg",
+    ]);
+  });
+
+  it("does not accuse an already-keyed object of being an orphan", () => {
+    // Under a Household prefix and belonging to an Entry this run did not
+    // read -- a Household with no legacy Entries at all. Reporting it would
+    // send the operator looking for a problem that is not there.
+    expect(
+      unclaimedLegacyObjects([`${HOUSEHOLD}/place-9/other.jpg`], plans),
+    ).toEqual([]);
+  });
+});
+
 describe("relocateEntry", () => {
   it("copies, verifies, updates the row, and only then deletes the originals", async () => {
     const world = fakeWorld(["place-1/abc.jpg", "place-1/abc-thumb.webp"]);
 
     const result = await relocateEntry(world.deps, planEntry(entry()));
 
-    expect(result).toEqual({ entryId: "entry-1", moved: 2, cleaned: 0 });
+    expect(result).toEqual({ entryId: "entry-1", copied: 2, repointed: true, removed: 2 });
     expect(world.calls).toEqual([
       ["exists", `${HOUSEHOLD}/place-1/abc.jpg`],
       ["copy", "place-1/abc.jpg", `${HOUSEHOLD}/place-1/abc.jpg`],
@@ -170,7 +204,9 @@ describe("relocateEntry", () => {
 
     const result = await relocateEntry(world.deps, planEntry(entry()));
 
-    expect(result.moved).toBe(2);
+    // Nothing to copy -- the previous run already did that, which is exactly
+    // what the count must say.
+    expect(result).toEqual({ entryId: "entry-1", copied: 0, repointed: true, removed: 2 });
     expect(world.calls.filter(([name]) => name === "copy")).toEqual([]);
     expect(world.rows["entry-1"]).toEqual({
       photo_path: `${HOUSEHOLD}/place-1/abc.jpg`,
@@ -199,7 +235,7 @@ describe("relocateEntry", () => {
       ),
     );
 
-    expect(result).toEqual({ entryId: "entry-1", moved: 0, cleaned: 1 });
+    expect(result).toEqual({ entryId: "entry-1", copied: 0, repointed: false, removed: 1 });
     expect(world.rows).toEqual({});
     expect(world.objects.has("place-1/abc.jpg")).toBe(false);
   });
@@ -220,7 +256,7 @@ describe("relocateEntry", () => {
       ),
     );
 
-    expect(result).toEqual({ entryId: "entry-1", moved: 0, cleaned: 0 });
+    expect(result).toEqual({ entryId: "entry-1", copied: 0, repointed: false, removed: 0 });
     expect(world.calls.some(([name]) => name !== "exists")).toBe(false);
   });
 });

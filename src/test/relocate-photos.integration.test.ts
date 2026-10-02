@@ -1,7 +1,11 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { PHOTO_BUCKET } from "@/lib/photos";
 import { serviceRoleClient, seedTwoHouseholds, type Fixture } from "./households";
-import { bucketDeps, planEntry, relocateEntry } from "../../scripts/relocate-photos.mjs";
+import {
+  planEntry,
+  relocateEntry,
+  storageAndEntryDeps,
+} from "../../scripts/relocate-photos.mjs";
 
 /**
  * #50 -- moving pre-Household photo objects under their Household prefix,
@@ -10,9 +14,9 @@ import { bucketDeps, planEntry, relocateEntry } from "../../scripts/relocate-pho
  * The unit tests next to the script pin the order it does things in; what
  * they cannot show is that Supabase Storage behaves the way that order
  * assumes -- that `copy` leaves the original in place, that `list` can be
- * asked whether one object exists, and that a signed URL still comes back
- * once the row has been repointed. Those are the facts the whole design rests
- * on, and only a real stack can answer them.
+ * asked whether one object exists, and that the bytes of a dish are still
+ * downloadable from the path its row now names. Those are the facts the whole
+ * design rests on, and only a real stack can answer them.
  */
 describe("relocate-photos (real bucket)", () => {
   const admin = serviceRoleClient();
@@ -83,7 +87,12 @@ describe("relocate-photos (real bucket)", () => {
     return data;
   }
 
-  async function signable(path: string) {
+  /**
+   * The bytes, fetched the way the app's signed URL ultimately fetches them.
+   * Downloading rather than signing on purpose: storage will sign a path with
+   * nothing behind it, so a signature proves nothing about the object.
+   */
+  async function downloadable(path: string) {
     const { data, error } = await admin.storage
       .from(PHOTO_BUCKET)
       .download(path);
@@ -95,11 +104,11 @@ describe("relocate-photos (real bucket)", () => {
       photo_path: legacyPhoto,
       thumbnail_path: legacyThumbnail,
     });
-    expect(await signable(legacyPhoto)).toBe(true);
+    expect(await downloadable(legacyPhoto)).toBe(true);
   });
 
   it("moves both objects, repoints the row, and leaves nothing behind", async () => {
-    const deps = bucketDeps(admin);
+    const deps = storageAndEntryDeps(admin);
 
     const result = await relocateEntry(
       deps,
@@ -111,20 +120,20 @@ describe("relocate-photos (real bucket)", () => {
       }),
     );
 
-    expect(result.moved).toBe(2);
+    expect(result).toEqual({ entryId, copied: 2, repointed: true, removed: 2 });
     expect(await storedPaths()).toEqual({
       photo_path: keyedPhoto,
       thumbnail_path: keyedThumbnail,
     });
     // The dish still opens -- the same bytes, under the new path.
-    expect(await signable(keyedPhoto)).toBe(true);
-    expect(await signable(keyedThumbnail)).toBe(true);
+    expect(await downloadable(keyedPhoto)).toBe(true);
+    expect(await downloadable(keyedThumbnail)).toBe(true);
     expect(await deps.exists(legacyPhoto)).toBe(false);
     expect(await deps.exists(legacyThumbnail)).toBe(false);
   });
 
   it("changes nothing when run again", async () => {
-    const deps = bucketDeps(admin);
+    const deps = storageAndEntryDeps(admin);
     const before = await storedPaths();
 
     const result = await relocateEntry(
@@ -132,9 +141,9 @@ describe("relocate-photos (real bucket)", () => {
       planEntry({ id: entryId, household_id: fixture.a.id, ...before }),
     );
 
-    expect(result).toEqual({ entryId, moved: 0, cleaned: 0 });
+    expect(result).toEqual({ entryId, copied: 0, repointed: false, removed: 0 });
     expect(await storedPaths()).toEqual(before);
-    expect(await signable(keyedPhoto)).toBe(true);
+    expect(await downloadable(keyedPhoto)).toBe(true);
   });
 
   it("sweeps up an original left behind by an interrupted run", async () => {
@@ -145,15 +154,15 @@ describe("relocate-photos (real bucket)", () => {
       .upload(legacyPhoto, pixel, { contentType: "image/webp" });
     expect(error).toBeNull();
 
-    const deps = bucketDeps(admin);
+    const deps = storageAndEntryDeps(admin);
     const result = await relocateEntry(
       deps,
       planEntry({ id: entryId, household_id: fixture.a.id, ...(await storedPaths()) }),
     );
 
-    expect(result).toEqual({ entryId, moved: 0, cleaned: 1 });
+    expect(result).toEqual({ entryId, copied: 0, repointed: false, removed: 1 });
     expect(await deps.exists(legacyPhoto)).toBe(false);
     // And the dish is untouched by the sweep.
-    expect(await signable(keyedPhoto)).toBe(true);
+    expect(await downloadable(keyedPhoto)).toBe(true);
   });
 });
