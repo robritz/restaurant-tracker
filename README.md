@@ -4,7 +4,7 @@
 
 As a family full of neurodivergent folks, we often struggle to keep track of where everyone likes to eat, and what they like to eat. Each of us has different sensory needs when it comes to food. It can often be a challenge to remember where we all like to eat together. 
 
-The goal of this app is to make this process easy and fun by centering the UX around simply taking a photo and uploading it later. We can focus on snapping a quick photo of our food (like OG Instagram days). A day, week, month, or year later we can select the image to remember where we ate and save its location. 
+The goal of this app is to make this process easy and fun by centering the UX around simply taking a photo and uploading it later, using its EXIF data to remember where we enjoyed the meal. We can focus on snapping a quick photo of our food (like OG Instagram days). A day, week, month, or year later we can select the image to remember where we ate and save its location. 
 
 This is V2 of my `food-sensitivity` app. It is in active development.
 
