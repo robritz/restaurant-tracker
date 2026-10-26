@@ -1,5 +1,5 @@
 ## Agent skills
-Be less verbose.
+Be concise. Keep responses simple.
 
 ### Issue tracker
 
