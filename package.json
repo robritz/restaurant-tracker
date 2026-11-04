@@ -16,7 +16,8 @@
     "supabase:reset": "supabase db reset && npm run seed",
     "seed": "node --env-file=.env.local scripts/seed-household.mjs",
     "relocate:photos": "node --env-file=${RELOCATE_ENV_FILE:-.env.local} scripts/relocate-photos.mjs",
-    "gen:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts"
+    "gen:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
+    "test:mutation": "stryker run"
   },
   "dependencies": {
     "@emotion/react": "^11.13.3",
@@ -35,6 +36,9 @@
     "sharp": "^0.35.4"
   },
   "devDependencies": {
+    "@stryker-mutator/core": "^10.1.1",
+    "@stryker-mutator/typescript-checker": "^10.1.1",
+    "@stryker-mutator/vitest-runner": "^10.1.1",
     "@types/node": "^22.9.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",

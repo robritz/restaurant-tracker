@@ -36,3 +36,7 @@ next-env.d.ts
 # -- and a bare `.env*` silently matches it too.
 .env*
 !.env*.example
+
+# stryker -- mutation reports and its scratch sandbox
+/reports
+.stryker-tmp
