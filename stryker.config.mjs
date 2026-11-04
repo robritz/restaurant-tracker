@@ -1,6 +1,6 @@
 // @ts-check
 /** @type {import('@stryker-mutator/api/core').PartialStrykerOptions} */
-export default {
+const config = {
   testRunner: "vitest",
   // The unit suite only. Integration tests need the local Supabase stack and
   // would make every mutant pay for a database round trip.
@@ -27,3 +27,5 @@ export default {
   incremental: true,
   incrementalFile: "reports/stryker-incremental.json",
 };
+
+export default config;
